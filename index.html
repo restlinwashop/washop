@@ -2959,18 +2959,40 @@ function renderOperation() {
       const sent = _opSentTotal(pid, date);
       const used = _opUsedTotal(pid, date);
       const f2stock = sent - used;
+      const remaining = Math.max(0, r.qty - sent);
       const pct = r.qty > 0 ? Math.min(100, Math.round(sent/r.qty*100)) : 0;
+      const isDone = pct >= 100;
       const cat = S.categories.find(c => c.id === r.catId);
-      return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;min-width:160px;flex:1">
-        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">${r.name}</div>
-        <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--text)">${r.qty.toLocaleString()}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">needed total</div>
-        <div style="margin-top:8px;background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden">
-          <div style="height:100%;background:${pct>=100?'var(--accent)':'var(--accent2)'};width:${pct}%;transition:width .3s"></div>
+      const catType = cat?.type || 'linen';
+      const statusColor = isDone ? '#15803d' : sent > 0 ? '#92400e' : '#6b7280';
+      return `<div style="background:#fff;border:2px solid ${isDone?'#86efac':sent>0?'#fde68a':'var(--border)'};border-radius:12px;padding:16px;transition:border-color .3s">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:14px;font-weight:700;flex:1">${r.name}</span>
+          <span class="badge ${catType==='towel'?'bg-blue':'bg-green'}" style="font-size:10px">${cat?.name||''}</span>
+          <span class="badge" style="background:${isDone?'#dcfce7':sent>0?'#fef3c7':'#f3f4f6'};color:${statusColor};font-size:10px">
+            ${isDone?'✓ Done':sent>0?'In Progress':'Not Started'}
+          </span>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px">
-          <span style="color:var(--accent2)">📤 ${sent.toLocaleString()} sent</span>
-          <span style="color:${f2stock<0?'var(--danger)':'var(--accent)'}">F2: ${f2stock.toLocaleString()}</span>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          <div style="text-align:center;background:#f3f4f6;border-radius:8px;padding:10px 4px">
+            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#374151">${r.qty.toLocaleString()}</div>
+            <div style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase;margin-top:2px">Total</div>
+          </div>
+          <div style="text-align:center;background:${isDone?'#dcfce7':sent>0?'#fef3c7':'#f9fafb'};border-radius:8px;padding:10px 4px">
+            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:${isDone?'#15803d':sent>0?'#92400e':'#d1d5db'}">${sent.toLocaleString()}</div>
+            <div style="font-size:9px;color:${statusColor};font-weight:700;text-transform:uppercase;margin-top:2px">Sent</div>
+          </div>
+          <div style="text-align:center;background:${remaining===0?'#dcfce7':'#fee2e2'};border-radius:8px;padding:10px 4px">
+            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:${remaining===0?'#15803d':'#dc2626'}">${remaining.toLocaleString()}</div>
+            <div style="font-size:9px;color:${remaining===0?'#15803d':'#dc2626'};font-weight:700;text-transform:uppercase;margin-top:2px">Left</div>
+          </div>
+        </div>
+        <div style="background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden">
+          <div style="height:100%;background:${isDone?'#16a34a':sent>0?'#eab308':'#e5e7eb'};width:${pct}%;transition:width .4s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--muted)">
+          <span>📤 F2 stock: <strong style="color:#0284c7">${f2stock.toLocaleString()}</strong></span>
+          <span>${pct}% complete</span>
         </div>
       </div>`;
     }).join('');
@@ -2989,19 +3011,24 @@ function renderOperation() {
     const pid = p.id || p;
     const pname = p.name || pid;
     const cat = S.categories.find(c => c.id === p.catId);
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
-      <div style="font-size:12px;font-weight:700;margin-bottom:8px">${pname}
-        ${cat ? `<span class="badge ${cat.type==='towel'?'bg-blue':'bg-green'}" style="font-size:9px;margin-left:4px">${cat.type}</span>` : ''}
+    const catType = cat?.type || 'linen';
+    const borderColor = catType === 'towel' ? '#93c5fd' : '#86efac';
+    const qty = opQtys[pid] || 0;
+    return `<div style="background:#fff;border:2px solid ${qty>0?borderColor:'var(--border)'};border-radius:14px;padding:16px;transition:border-color .2s">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+        ${pname}
+        ${cat ? `<span class="badge ${catType==='towel'?'bg-blue':'bg-green'}" style="font-size:9px">${cat.name}</span>` : ''}
       </div>
-      <div style="display:flex;align-items:center;gap:7px">
-        <button class="qty-btn" onclick="adjOpQty('${pid}',-10)" title="-10">−−</button>
-        <button class="qty-btn" onclick="adjOpQty('${pid}',-1)">−</button>
-        <div class="qty-display" id="opq-${pid}"
-          onclick="openKP('${pname}','Qty sending to Factory 2',(v)=>{opQtys['${pid}']=v;document.getElementById('opq-${pid}').textContent=v||0;},opQtys['${pid}']||0)"
-          style="font-size:18px;flex:1;cursor:pointer">${opQtys[pid]||0}</div>
-        <button class="qty-btn" onclick="adjOpQty('${pid}',1)">+</button>
-        <button class="qty-btn" onclick="adjOpQty('${pid}',10)" title="+10">++</button>
+      <div id="opq-${pid}"
+        onclick="openKP('${pname}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;renderOperation();},${qty})"
+        style="font-family:'Syne',sans-serif;font-size:42px;font-weight:800;text-align:center;
+               color:${qty>0?'#16a34a':'#d1d5db'};cursor:pointer;padding:14px 0;
+               background:${qty>0?'#f0fdf4':'#f9fafb'};border-radius:10px;
+               border:2px dashed ${qty>0?'#86efac':'#e5e7eb'};
+               transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent">
+        ${qty > 0 ? qty.toLocaleString() : '—'}
       </div>
+      <div style="text-align:center;font-size:10px;color:var(--muted);margin-top:6px;font-weight:600">TAP TO ENTER</div>
     </div>`;
   }).join('');
 
