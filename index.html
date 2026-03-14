@@ -1807,11 +1807,20 @@ const _origSaveCCdriver = saveCCdriver;
 saveCCdriver = async function() {
   const c = S.customers.find(x=>x.id===ccId); if (!c) return;
   const did = document.getElementById('cc-driver-sel').value||null;
-  const ro = parseInt(document.getElementById('cc-route-order').value)||99;
+  // FIX: input field is 'cc-order-num' not 'cc-route-order'
+  const ro = parseInt(document.getElementById('cc-order-num').value)||99;
   try {
+    // FIX 1: patch customer record
     await _patch('customers',{driver_id:did,route_order:ro},'?id=eq.'+ccId);
-    await _patch('orders',{driver_id:did,route_order:ro},'?customer_id=eq.'+ccId+'&status=in.(pending,packed)');
-  } catch(e) { console.warn('saveCCdriver DB:', e); }
+    // FIX 2: Supabase in() syntax requires format: status=in.(val1,val2)
+    // BUT some versions need it URL-encoded or as separate calls — use two separate patches to be safe
+    await _patch('orders',{driver_id:did,route_order:ro},'?customer_id=eq.'+ccId+'&status=eq.pending');
+    await _patch('orders',{driver_id:did,route_order:ro},'?customer_id=eq.'+ccId+'&status=eq.packed');
+  } catch(e) {
+    console.error('saveCCdriver DB error:', e);
+    _toast('⚠ Save failed: ' + e.message.slice(0,80), 5000);
+    return; // stop — don't update local state if DB failed
+  }
   c.driverId=did; c.routeOrder=ro;
   S.orders.forEach(o=>{ if(o.customerId===ccId&&o.status!=='delivered'){o.driverId=did;o.routeOrder=ro;} });
   renderAdmin(); _toast('✓ Driver saved', 2000);
