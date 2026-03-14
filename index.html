@@ -2337,7 +2337,7 @@ toggleChip = function(oid, pid, type, el) {
 };
 
 // Auto-refresh every 60s (multi-device sync)
-setInterval(loadFromDB, 60000);
+setInterval(loadFromDB, 30000);
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 // Add sync badge to topbar
@@ -2351,7 +2351,7 @@ setInterval(loadFromDB, 60000);
     const btn = document.createElement('button');
     btn.textContent = '↻ Sync Now';
     Object.assign(btn.style, {padding:'5px 12px',background:'#fff',border:'1px solid #e2e4ec',borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:'600'});
-    btn.onclick = loadFromDB;
+    btn.onclick = () => { loadFromDB(); _toast('Syncing...', 1500); };
     tb.appendChild(badge); tb.appendChild(btn);
   }
 })();
@@ -3022,11 +3022,11 @@ function renderOperation() {
       <div id="opq-${pid}"
         onclick="openKP('${pname}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;renderOperation();},${qty})"
         style="font-family:'Syne',sans-serif;font-size:42px;font-weight:800;text-align:center;
-               color:${qty>0?'#16a34a':'#d1d5db'};cursor:pointer;padding:14px 0;
+               color:${qty>0?'#16a34a':'#9ca3af'};cursor:pointer;padding:14px 0;
                background:${qty>0?'#f0fdf4':'#f9fafb'};border-radius:10px;
                border:2px dashed ${qty>0?'#86efac':'#e5e7eb'};
                transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent">
-        ${qty > 0 ? qty.toLocaleString() : '—'}
+        ${qty.toLocaleString()}
       </div>
       <div style="text-align:center;font-size:10px;color:var(--muted);margin-top:6px;font-weight:600">TAP TO ENTER</div>
     </div>`;
@@ -3169,7 +3169,7 @@ async function deleteOpTransfer(id) {
 const _origLoadFromDB = loadFromDB;
 loadFromDB = async function() {
   await _origLoadFromDB();
-  // Also load op_transfers
+  // Always load op_transfers
   try {
     const transfers = await _get('op_transfers', '?select=*&order=date.desc,time_sent.desc');
     S.opTransfers = transfers.map(t => ({
@@ -3177,9 +3177,13 @@ loadFromDB = async function() {
     }));
   } catch(e) {
     if(!S.opTransfers) S.opTransfers = [];
-    console.log('op_transfers not loaded (table may need creating):', e.message?.slice(0,50));
   }
-  if(document.getElementById('page-operation')?.classList.contains('active')) renderOperation();
+  // Refresh any active page that shows live data
+  const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
+  if(activePage === 'operation') renderOperation();
+  if(activePage === 'dashboard') renderDashboard();
+  if(activePage === 'order') renderOrders();
+  if(activePage === 'dispatch') renderDispatch();
 };
 
 // Patch showPage to init operation
