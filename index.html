@@ -305,8 +305,8 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
   </div>
   <nav>
     <div class="nav-section">Operations</div>
-    <div class="nav-item" onclick="showPage('operation')"><span class="nav-icon">🏭</span>Operation</div>
     <div class="nav-item active" onclick="showPage('dashboard')"><span class="nav-icon">📊</span>Dashboard</div>
+    <div class="nav-item" onclick="showPage('operation')"><span class="nav-icon">🏭</span>Operation</div>
     <div class="nav-item" onclick="showPage('receiving')"><span class="nav-icon">📦</span>Receiving</div>
     <div class="nav-item" onclick="showPage('order')">
       <span class="nav-icon">🗂️</span>Order / Pack
@@ -350,24 +350,30 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       </div>
     </div>
 
-    <!-- FACTORY 1 SECTION -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <div style="width:4px;height:24px;background:var(--accent2);border-radius:2px"></div>
-      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--accent2)">🏭 FACTORY 1 — Production</div>
-      <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace" id="dash-f1-label"></div>
-    </div>
-    <div id="dash-f1-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:24px">
-      <div style="color:var(--muted);font-size:13px;padding:12px">Loading...</div>
-    </div>
-
-    <!-- FACTORY 2 SECTION -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <div style="width:4px;height:24px;background:var(--accent);border-radius:2px"></div>
-      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--accent)">📦 FACTORY 2 — Orders</div>
-      <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace" id="dash-f2-label"></div>
-    </div>
-    <div id="dash-f2-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:24px">
-      <div style="color:var(--muted);font-size:13px;padding:12px">Loading...</div>
+    <!-- F1 + F2 SIDE BY SIDE -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px">
+      <!-- FACTORY 1 -->
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="width:4px;height:24px;background:var(--accent2);border-radius:2px"></div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--accent2)">🏭 FACTORY 1 — Production</div>
+          <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-left:auto" id="dash-f1-label"></div>
+        </div>
+        <div id="dash-f1-grid" style="display:flex;flex-direction:column;gap:8px">
+          <div style="color:var(--muted);font-size:13px;padding:12px">Loading...</div>
+        </div>
+      </div>
+      <!-- FACTORY 2 -->
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="width:4px;height:24px;background:var(--accent);border-radius:2px"></div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--accent)">📦 FACTORY 2 — Orders</div>
+          <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-left:auto" id="dash-f2-label"></div>
+        </div>
+        <div id="dash-f2-grid" style="display:flex;flex-direction:column;gap:8px">
+          <div style="color:var(--muted);font-size:13px;padding:12px">Loading...</div>
+        </div>
+      </div>
     </div>
 
     <!-- Bottom row: Activity + Alarms -->
@@ -1811,19 +1817,25 @@ function renderDashboard() {
       const isDone = pct >= 100;
       const cat = S.categories.find(c => c.id === r.catId);
       const typeColor = cat?.type === 'towel' ? '#0284c7' : '#16a34a';
-
-      return `<div class="dash-tile ${isDone ? 'tile-done' : sent > 0 ? 'tile-pending' : 'tile-base'}">
-        <div class="dash-tile-label" style="color:${typeColor}">${cat?.name || 'Product'}</div>
-        <div class="dash-tile-product">${r.name}</div>
-        <div style="display:flex;align-items:baseline;gap:8px">
-          <div class="dash-tile-val" style="color:${isDone?'#16a34a':sent>0?'#eab308':'#374151'}">${sent.toLocaleString()}</div>
-          <div style="font-size:12px;color:var(--muted)">/ ${r.qty.toLocaleString()}</div>
+      const statusColor = isDone ? '#16a34a' : sent > 0 ? '#eab308' : '#9ca3af';
+      const tileClass = isDone ? 'tile-done' : sent > 0 ? 'tile-pending' : 'tile-base';
+      return `<div class="dash-tile ${tileClass}" style="padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:700;flex:1">${r.name}</span>
+          <span class="badge" style="background:${isDone?'#dcfce7':sent>0?'#fef3c7':'#f3f4f6'};color:${statusColor};font-size:10px">
+            ${isDone ? '✓ Done' : sent > 0 ? 'In Progress' : 'Not Started'}
+          </span>
         </div>
-        <div class="dash-tile-sub" style="color:${isDone?'#16a34a':sent>0?'#eab308':'var(--muted)'}">
-          ${isDone ? '✓ Complete' : sent > 0 ? `${r.qty-sent} remaining` : 'Not started'}
-        </div>
-        <div class="dash-tile-bar">
-          <div class="dash-tile-bar-fill" style="width:${pct}%;background:${isDone?'#16a34a':sent>0?'#eab308':'#e5e7eb'}"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:${statusColor};min-width:60px">${sent.toLocaleString()}</div>
+          <div style="flex:1">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:3px">
+              <span>sent</span><span>${r.qty.toLocaleString()} needed</span>
+            </div>
+            <div class="dash-tile-bar" style="margin-top:0">
+              <div class="dash-tile-bar-fill" style="width:${pct}%;background:${isDone?'#16a34a':sent>0?'#eab308':'#e5e7eb'}"></div>
+            </div>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -1853,36 +1865,36 @@ function renderDashboard() {
     f2Grid.innerHTML = f2Keys.map(pid => {
       const d = f2Data[pid];
       const sent = _opSentTotal ? _opSentTotal(pid, dashDate) : 0;
-      const available = sent - d.packed - d.delivered; // in F2 not yet assigned to order
       const pending = d.required - d.packed - d.delivered;
       const cat = S.categories.find(c => c.id === d.catId);
-      const typeColor = cat?.type === 'towel' ? '#0284c7' : '#16a34a';
-
-      // Status: all delivered = done (green), some packed = in progress (blue), pending = yellow
       const allDone = d.delivered >= d.required;
-      const inProgress = !allDone && d.packed > 0;
+      const inProgress = !allDone && (d.packed > 0);
       const tileClass = allDone ? 'tile-done' : inProgress ? 'tile-ready' : 'tile-pending';
       const statusColor = allDone ? '#16a34a' : inProgress ? '#0284c7' : '#eab308';
-      const statusLabel = allDone ? '✓ All Delivered' : inProgress ? '📦 In Progress' : '⏳ Pending';
-
-      return `<div class="dash-tile ${tileClass}">
-        <div class="dash-tile-label" style="color:${typeColor}">${cat?.name||'Product'}</div>
-        <div class="dash-tile-product">${d.name}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0">
-          <div style="background:#fef3c7;border-radius:6px;padding:5px 8px;text-align:center">
-            <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#92400e">${pending.toLocaleString()}</div>
-            <div style="font-size:9px;color:#92400e;font-weight:700">PENDING</div>
+      const statusLabel = allDone ? '✓ Delivered' : inProgress ? 'In Progress' : 'Pending';
+      return `<div class="dash-tile ${tileClass}" style="padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700;flex:1">${d.name}</span>
+          <span class="badge" style="background:${allDone?'#dcfce7':inProgress?'#dbeafe':'#fef3c7'};color:${statusColor};font-size:10px">${statusLabel}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;text-align:center">
+          <div style="background:#fef3c7;border-radius:6px;padding:5px 4px">
+            <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:#92400e">${pending.toLocaleString()}</div>
+            <div style="font-size:8px;color:#92400e;font-weight:700;text-transform:uppercase">Pending</div>
           </div>
-          <div style="background:#dcfce7;border-radius:6px;padding:5px 8px;text-align:center">
-            <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#15803d">${d.delivered.toLocaleString()}</div>
-            <div style="font-size:9px;color:#15803d;font-weight:700">DONE</div>
+          <div style="background:#dbeafe;border-radius:6px;padding:5px 4px">
+            <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:#1d4ed8">${d.packed.toLocaleString()}</div>
+            <div style="font-size:8px;color:#1d4ed8;font-weight:700;text-transform:uppercase">Packed</div>
+          </div>
+          <div style="background:#dcfce7;border-radius:6px;padding:5px 4px">
+            <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:#15803d">${d.delivered.toLocaleString()}</div>
+            <div style="font-size:8px;color:#15803d;font-weight:700;text-transform:uppercase">Done</div>
+          </div>
+          <div style="background:#eff6ff;border-radius:6px;padding:5px 4px">
+            <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:#0284c7">${sent.toLocaleString()}</div>
+            <div style="font-size:8px;color:#0284c7;font-weight:700;text-transform:uppercase">F1→F2</div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
-          <span>📤 F2 stock: <strong style="color:#0284c7">${sent.toLocaleString()}</strong></span>
-          <span>📋 Total: ${d.required.toLocaleString()}</span>
-        </div>
-        <div class="dash-tile-sub" style="color:${statusColor};margin-top:6px;font-weight:700">${statusLabel}</div>
       </div>`;
     }).join('');
   }
@@ -2432,16 +2444,16 @@ async function saveBulkAll() {
 
 // ═══════════════════════════════════════
 // PIN LOCK SYSTEM — 4 Access Levels
-// 2291 → Receiving only
-// 4782 → Operation + view Dispatch (read-only dispatch)
-// 3847 → Order/Pack + Dispatch + view Operation (read-only)
-// 6451 → Admin — full access
+// 1234 → Receiving only
+// 1959 → Operation + view Dispatch (read-only dispatch)
+// 3535 → Order/Pack + Dispatch + view Operation (read-only)
+// 6351 → Admin — full access
 // ═══════════════════════════════════════
 const PINS = {
-  '2291': 'receiving',   // Receiving only
-  '4782': 'operation',   // Operation + view Dispatch
-  '3847': 'order',       // Order/Pack + Dispatch + view Operation
-  '6451': 'admin',       // Full access
+  '1234': 'receiving',   // Receiving only
+  '1959': 'operation',   // Operation + view Dispatch
+  '3535': 'order',       // Order/Pack + Dispatch + view Operation
+  '6351': 'admin',       // Full access
 };
 
 // Access rules per level
