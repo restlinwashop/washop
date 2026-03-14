@@ -502,6 +502,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <div class="admin-tab" onclick="showAdminTab('drivers',this)">Drivers</div>
       <div class="admin-tab" onclick="showAdminTab('categories',this)">Categories</div>
       <div class="admin-tab" onclick="showAdminTab('products',this)">Products</div>
+      <div class="admin-tab" onclick="showAdminTab('frequencies',this)">Frequencies</div>
     </div>
 
     <!-- CUSTOMERS -->
@@ -528,8 +529,35 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
           <button class="btn btn-primary" style="height:40px;margin-top:21px" onclick="addCustomer()">Add</button>
         </div>
       </div>
-      <div class="section-title">Customers (<span id="cust-cnt">0</span>) — click to open card</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div class="section-title" style="margin-bottom:0">Customers (<span id="cust-cnt">0</span>)</div>
+        <input type="text" id="cust-search" placeholder="🔍 Search customers..." oninput="renderAdmin()" style="width:240px;padding:7px 12px">
+      </div>
       <div id="customers-list"></div>
+    </div>
+
+    <!-- FREQUENCIES -->
+    <div class="admin-section" id="admin-frequencies">
+      <div class="add-form">
+        <div class="section-title">Add Custom Frequency</div>
+        <div class="add-row">
+          <div class="field"><label>Label</label><input id="nfr-name" placeholder="e.g. 4x Week"></div>
+          <div class="field" style="min-width:80px"><label>Times/week</label><input id="nfr-times" type="number" min="1" max="7" placeholder="4"></div>
+          <button class="btn btn-primary" style="height:40px;margin-top:21px" onclick="addFrequency()">Add</button>
+        </div>
+      </div>
+      <div class="section-title">Built-in Frequencies</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">
+        <span class="badge bg-green" style="padding:6px 12px;font-size:12px">Weekly</span>
+        <span class="badge bg-green" style="padding:6px 12px;font-size:12px">Fortnightly</span>
+        <span class="badge bg-green" style="padding:6px 12px;font-size:12px">Monthly</span>
+        <span class="badge bg-blue" style="padding:6px 12px;font-size:12px">3x Week</span>
+        <span class="badge bg-blue" style="padding:6px 12px;font-size:12px">2x Week</span>
+        <span class="badge bg-warn" style="padding:6px 12px;font-size:12px">Daily</span>
+        <span class="badge bg-gray" style="padding:6px 12px;font-size:12px">On Demand</span>
+      </div>
+      <div class="section-title">Custom Frequencies</div>
+      <div id="custom-freq-list"></div>
     </div>
 
     <!-- DRIVERS -->
@@ -642,19 +670,34 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
     <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 16px;font-size:12px;margin-bottom:14px;color:#856404">
       ⚡ Make your changes below, then click <strong>Save All Changes</strong> to apply everything at once.
     </div>
-    <div style="overflow-x:auto">
+    <!-- Route View Toggle -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-sm btn-blue" id="bulk-view-table" onclick="setBulkView('table')">📋 Table View</button>
+      <button class="btn btn-sm btn-secondary" id="bulk-view-route" onclick="setBulkView('route')">🗺️ Route View (by Driver × Day)</button>
+      <span id="bulk-unsaved" style="font-size:12px;color:var(--warn);font-weight:600;display:none">● Unsaved changes</span>
+    </div>
+    <div id="bulk-table-view" style="overflow-x:auto">
       <table id="bulk-table">
         <thead>
           <tr>
             <th style="min-width:200px">Customer</th>
             <th style="min-width:140px">Driver</th>
-            <th style="min-width:60px">Route #</th>
             <th style="min-width:280px">Delivery Days</th>
             <th style="min-width:130px">Frequency</th>
           </tr>
         </thead>
         <tbody id="bulk-tbody"></tbody>
       </table>
+    </div>
+    <div id="bulk-route-view" style="display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <select id="route-driver-sel" onchange="renderRouteView()" style="width:160px"><option value="">Select Driver...</option></select>
+        <select id="route-day-sel" onchange="renderRouteView()" style="width:140px">
+          <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
+          <option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+        </select>
+      </div>
+      <div id="route-list"></div>
     </div>
     <div style="margin-top:16px;display:flex;justify-content:flex-end">
       <button class="btn btn-primary" onclick="saveBulkAll()">💾 Save All Changes</button>
@@ -1566,15 +1609,20 @@ function renderPricing(){
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:10px">${c.name} <span style="font-size:11px;font-weight:400;color:var(--muted)">${c.frequency}</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px">
-        ${S.products.map(p=>{
-          const price=((S.custPrices||{})[c.id]||{})[p.id];
-          const cat=S.categories.find(x=>x.id===p.catId);
-          return`<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
-            <span style="flex:1;font-size:12px;font-weight:500">${p.name}</span>
-            <span class="badge ${cat?.type==='towel'?'bg-blue':'bg-green'}" style="font-size:9px">${cat?.type||'?'}</span>
-            <input type="text" id="pr-${c.id}-${p.id}" value="${price!=null?'$'+price.toFixed(2):''}" placeholder="—" readonly onclick="openKP('${p.name}','${c.name}\nEnter price in cents (250 = $2.50)',(v)=>{setCustPrice('${c.id}','${p.id}',v/100);},${price!=null?Math.round(price*100):0},true)" style="width:72px;padding:5px 7px;text-align:right;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px">
-          </div>`;
-        }).join('')}
+        ${(()=>{
+          const assigned=getCustProds(c.id);
+          const prods=S.products.filter(p=>assigned.has(p.id));
+          if(!prods.length) return '<div style="font-size:12px;color:var(--muted);padding:4px">No products assigned — set in Customer Card → Products tab</div>';
+          return prods.map(p=>{
+            const price=((S.custPrices||{})[c.id]||{})[p.id];
+            const cat=S.categories.find(x=>x.id===p.catId);
+            return`<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+              <span style="flex:1;font-size:12px;font-weight:500">${p.name}</span>
+              <span class="badge ${cat?.type==='towel'?'bg-blue':'bg-green'}" style="font-size:9px">${cat?.type||'?'}</span>
+              <input type="text" id="pr-${c.id}-${p.id}" value="${price!=null?'$'+price.toFixed(2):''}" placeholder="—" readonly onclick="openKP('${p.name}','${c.name}\nEnter price in cents (250=$2.50)',(v)=>{setCustPrice('${c.id}','${p.id}',v/100);},${price!=null?Math.round(price*100):0},true)" style="width:72px;padding:5px 7px;text-align:right;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px">
+            </div>`;
+          }).join('');
+        })()}
       </div>
     </div>`).join('')||'<div class="empty">No customers</div>';
   const pkl=document.getElementById('pkg-list');
@@ -2248,6 +2296,221 @@ function lockSystem() {
   document.getElementById('main').style.display = 'none';
 })();
 
+
+
+// ═══════════════════════════════════════
+// ROUTE VIEW (Driver × Day)
+// ═══════════════════════════════════════
+let bulkView = 'table';
+
+function setBulkView(v) {
+  bulkView = v;
+  document.getElementById('bulk-table-view').style.display = v==='table' ? 'block' : 'none';
+  document.getElementById('bulk-route-view').style.display  = v==='route' ? 'block' : 'none';
+  document.getElementById('bulk-view-table').className = 'btn btn-sm ' + (v==='table' ? 'btn-blue' : 'btn-secondary');
+  document.getElementById('bulk-view-route').className = 'btn btn-sm ' + (v==='route' ? 'btn-blue' : 'btn-secondary');
+  if(v==='route') {
+    // populate driver select
+    const ds = document.getElementById('route-driver-sel');
+    ds.innerHTML = '<option value="">Select Driver...</option>' + S.drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    renderRouteView();
+  }
+}
+
+function renderRouteView() {
+  const did = document.getElementById('route-driver-sel')?.value;
+  const day = parseInt(document.getElementById('route-day-sel')?.value||1);
+  const rl = document.getElementById('route-list');
+  if(!rl) return;
+  if(!did) { rl.innerHTML = '<div class="empty">Select a driver above</div>'; return; }
+  
+  const DAYS = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const drv = S.drivers.find(d=>d.id===did);
+  
+  // Get customers for this driver who have this day in deliveryDays
+  let custs = S.customers.filter(c => {
+    if(c.driverId !== did) return false;
+    const days = c.deliveryDays && c.deliveryDays.length ? c.deliveryDays : [c.dueDay||4];
+    return days.includes(day);
+  });
+  
+  if(!custs.length) {
+    rl.innerHTML = `<div class="empty">${drv?.name} has no customers on ${DAYS[day]}</div>`;
+    return;
+  }
+  
+  // Sort by current routeOrder
+  custs = custs.slice().sort((a,b) => {
+    const ao = (bulkEdits[a.id]?.routeOrder) ?? (a.routeOrder||99);
+    const bo = (bulkEdits[b.id]?.routeOrder) ?? (b.routeOrder||99);
+    return ao - bo;
+  });
+  
+  rl.innerHTML = `
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--accent)">
+      🗺️ <strong>${drv?.name} — ${DAYS[day]}</strong> · ${custs.length} stops · Set route numbers below
+    </div>
+    <table style="width:100%">
+      <thead><tr>
+        <th style="width:80px">Route #</th>
+        <th>Customer</th>
+        <th>Address</th>
+        <th>Frequency</th>
+      </tr></thead>
+      <tbody>
+        ${custs.map((c,i) => {
+          const ro = (bulkEdits[c.id]?.routeOrder) ?? (c.routeOrder||'');
+          const edited = !!bulkEdits[c.id];
+          return `<tr style="${edited?'background:#f0fdf4;':''}">
+            <td><input type="number" value="${ro}" min="1" max="999"
+              onchange="bulkSetRoute('${c.id}',this.value)"
+              style="width:60px;padding:6px 8px;text-align:center;font-family:'DM Mono',monospace;font-size:15px;font-weight:700;border:2px solid ${edited?'var(--accent)':'var(--border)'};border-radius:6px">
+            </td>
+            <td><strong style="font-size:13px">${c.name}</strong></td>
+            <td style="font-size:12px;color:var(--muted)">${c.address||'—'}</td>
+            <td><span class="badge bg-green" style="font-size:11px">${c.frequency}</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ═══════════════════════════════════════
+// CUSTOM FREQUENCIES
+// ═══════════════════════════════════════
+if(!window.S) window.S = {};
+// Store custom frequencies in S
+function getFrequencies() {
+  const builtIn = ['Weekly','Fortnightly','Monthly','3x Week','2x Week','Daily','On Demand'];
+  const custom = S.customFreqs || [];
+  return [...builtIn, ...custom];
+}
+
+function addFrequency() {
+  const name = document.getElementById('nfr-name').value.trim();
+  if(!name) return alert('Enter a frequency name.');
+  if(!S.customFreqs) S.customFreqs = [];
+  if(S.customFreqs.includes(name)) return alert('Already exists.');
+  S.customFreqs.push(name);
+  document.getElementById('nfr-name').value = '';
+  renderFrequencies();
+  rebuildFreqSelects();
+  _toast('✓ Frequency added: ' + name, 2000);
+  // Persist to localStorage as backup
+  try { localStorage.setItem('washops_custom_freqs', JSON.stringify(S.customFreqs)); } catch(e){}
+}
+
+function removeFrequency(name) {
+  if(!S.customFreqs) return;
+  S.customFreqs = S.customFreqs.filter(f => f !== name);
+  renderFrequencies();
+  rebuildFreqSelects();
+  try { localStorage.setItem('washops_custom_freqs', JSON.stringify(S.customFreqs)); } catch(e){}
+}
+
+function renderFrequencies() {
+  const el = document.getElementById('custom-freq-list');
+  if(!el) return;
+  const cf = S.customFreqs || [];
+  el.innerHTML = cf.length
+    ? cf.map(f => `<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <span style="flex:1;font-weight:600;font-size:13px">${f}</span>
+        <button class="btn btn-xs btn-danger" onclick="removeFrequency('${f}')">Remove</button>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No custom frequencies yet. Add above.</div>';
+}
+
+function rebuildFreqSelects() {
+  const freqs = getFrequencies();
+  const opts = freqs.map(f => `<option value="${f}">${f}</option>`).join('');
+  ['nc-freq','cc-freq'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) { const prev = el.value; el.innerHTML = opts; el.value = prev; }
+  });
+}
+
+// Load custom freqs from localStorage on boot
+(function loadCustomFreqs() {
+  try {
+    const saved = localStorage.getItem('washops_custom_freqs');
+    if(saved) { S.customFreqs = JSON.parse(saved); }
+  } catch(e) {}
+})();
+
+// ═══════════════════════════════════════
+// PATCH renderBulk — fix init glitch + count
+// ═══════════════════════════════════════
+const _origRenderBulk = renderBulk;
+renderBulk = function() {
+  // Ensure driver filter is populated first
+  const ddf = document.getElementById('bulk-driver-filter');
+  if(ddf) {
+    const prevVal = ddf.value;
+    ddf.innerHTML = '<option value="">All Drivers</option><option value="__none__">Unassigned</option>' +
+      S.drivers.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    ddf.value = prevVal;
+  }
+  _origRenderBulk();
+  // Update count
+  const countEl = document.getElementById('bulk-count');
+  if(countEl) {
+    const q = (document.getElementById('bulk-search')?.value||'').toLowerCase();
+    const df = document.getElementById('bulk-driver-filter')?.value||'';
+    let custs = S.customers.filter(c => c.active);
+    if(q) custs = custs.filter(c => c.name.toLowerCase().includes(q));
+    if(df === '__none__') custs = custs.filter(c => !c.driverId);
+    else if(df) custs = custs.filter(c => c.driverId === df);
+    countEl.textContent = custs.length;
+  }
+  // Show unsaved indicator
+  const unsaved = document.getElementById('bulk-unsaved');
+  if(unsaved) unsaved.style.display = Object.keys(bulkEdits).length ? 'inline' : 'none';
+  // Also init route view driver select
+  if(bulkView === 'route') renderRouteView();
+};
+
+// ═══════════════════════════════════════
+// PATCH renderAdmin — add customer search
+// ═══════════════════════════════════════
+const _origRenderAdmin2 = renderAdmin;
+renderAdmin = function() {
+  _origRenderAdmin2();
+  // Apply customer search filter
+  const q = (document.getElementById('cust-search')?.value||'').toLowerCase();
+  if(q) {
+    const items = document.querySelectorAll('#customers-list .ali');
+    items.forEach(item => {
+      const name = item.querySelector('.ali-name')?.textContent?.toLowerCase()||'';
+      item.style.display = name.includes(q) ? '' : 'none';
+    });
+  }
+  // Render custom frequencies
+  renderFrequencies();
+  rebuildFreqSelects();
+  // Populate route driver select if route view active
+  const rds = document.getElementById('route-driver-sel');
+  if(rds) {
+    const prev = rds.value;
+    rds.innerHTML = '<option value="">Select Driver...</option>' + S.drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    rds.value = prev;
+  }
+};
+
+// Patch saveBulkAll to also refresh route view
+const _origSaveBulkAll = saveBulkAll;
+saveBulkAll = async function() {
+  await _origSaveBulkAll();
+  if(bulkView === 'route') renderRouteView();
+};
+
+// Patch bulkSetRoute to refresh route view after setting
+const _origBulkSetRoute = bulkSetRoute;
+bulkSetRoute = function(cid, val) {
+  _origBulkSetRoute(cid, val);
+  const unsaved = document.getElementById('bulk-unsaved');
+  if(unsaved) unsaved.style.display = 'inline';
+  if(bulkView === 'route') setTimeout(renderRouteView, 50);
+};
 
 async function ensureDeliveryDaysColumn() {
   // Try to add the column if it doesn't exist - will fail silently if already exists
