@@ -634,6 +634,16 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
         <div class="add-row">
           <div class="field"><label>Name</label><input id="np-name" placeholder="e.g. Bath Towel, 60x60 Tablecloth"></div>
           <div class="field" style="min-width:180px"><label>Category</label><select id="np-cat"><option value="">Select...</option></select></div>
+          <div class="field" style="min-width:160px">
+            <label>Track in Stock</label>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0">
+                <input type="checkbox" id="np-track" checked style="width:auto;cursor:pointer;width:16px;height:16px">
+                Yes — affects F2 stock & orders
+              </label>
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">Uncheck for mats, duvets etc.</div>
+          </div>
           <button class="btn btn-primary" style="height:40px;margin-top:21px" onclick="addProduct()">Add</button>
         </div>
       </div>
@@ -1768,7 +1778,17 @@ function renderAdmin(){
   // Products
   document.getElementById('products-list').innerHTML=S.products.map(p=>{
     const cat=S.categories.find(c=>c.id===p.catId);
-    return`<div class="ali" style="cursor:default"><div class="ali-name">${p.name}</div><div class="ali-meta">${cat?.name||'?'}</div><span class="badge ${cat?.type==='towel'?'bg-blue':'bg-green'}">${cat?.type||'?'}</span><button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removeProd('${p.id}')">Remove</button></div>`;
+    const tracked = p.trackStock !== false; // default true
+    return`<div class="ali" style="cursor:default">
+      <div class="ali-name">${p.name}</div>
+      <div class="ali-meta">${cat?.name||'?'}</div>
+      <span class="badge ${cat?.type==='towel'?'bg-blue':'bg-green'}">${cat?.type||'?'}</span>
+      <span class="badge ${tracked?'bg-green':'bg-gray'}" title="${tracked?'Tracked in stock':'Not tracked in stock'}">${tracked?'📦 Stock':'🔧 Op Only'}</span>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;margin:0;font-weight:500;text-transform:none;letter-spacing:0">
+        <input type="checkbox" ${tracked?'checked':''} onchange="toggleProdTrack('${p.id}',this.checked)" style="width:auto;cursor:pointer"> Track
+      </label>
+      <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removeProd('${p.id}')">Remove</button>
+    </div>`;
   }).join('')||'<div class="empty">No products</div>';
   // Update selects
   document.getElementById('np-cat').innerHTML='<option value="">Select...</option>'+S.categories.map(c=>`<option value="${c.id}">${c.name} (${c.type})</option>`).join('');
@@ -1776,7 +1796,7 @@ function renderAdmin(){
 function addCustomer(){const n=document.getElementById('nc-name').value.trim();if(!n)return alert('Enter name.');S.customers.push({id:uid(),name:n,address:document.getElementById('nc-addr').value.trim(),frequency:document.getElementById('nc-freq').value,dueDay:parseInt(document.getElementById('nc-day').value),email:document.getElementById('nc-email').value.trim(),phone:document.getElementById('nc-phone').value.trim(),notes:'',active:1,driverId:null,routeOrder:99});['nc-name','nc-addr','nc-email','nc-phone'].forEach(id=>document.getElementById(id).value='');renderAdmin();}
 function addDriver(){const n=document.getElementById('nd-name').value.trim();if(!n)return alert('Enter name.');S.drivers.push({id:uid(),name:n,vehicle:document.getElementById('nd-vehicle').value.trim()});document.getElementById('nd-name').value='';document.getElementById('nd-vehicle').value='';renderAdmin();}
 function addCategory(){const n=document.getElementById('ncat-name').value.trim();const t=document.getElementById('ncat-type').value;if(!n)return;S.categories.push({id:uid(),name:n,type:t});document.getElementById('ncat-name').value='';renderAdmin();}
-function addProduct(){const n=document.getElementById('np-name').value.trim();const c=document.getElementById('np-cat').value;if(!n||!c)return alert('Enter name and category.');S.products.push({id:uid(),name:n,catId:c});document.getElementById('np-name').value='';renderAdmin();}
+function addProduct(){const n=document.getElementById('np-name').value.trim();const c=document.getElementById('np-cat').value;if(!n||!c)return alert('Enter name and category.');const track=document.getElementById('np-track')?.checked!==false;S.products.push({id:uid(),name:n,catId:c,trackStock:track});document.getElementById('np-name').value='';renderAdmin();}
 function removeDriver(id){if(!confirm('Remove driver?'))return;S.drivers=S.drivers.filter(d=>d.id!==id);S.customers.forEach(c=>{if(c.driverId===id)c.driverId=null;});renderAdmin();}
 function removeCat(id){if(S.products.some(p=>p.catId===id)&&!confirm('Category has products. Remove anyway?'))return;S.categories=S.categories.filter(c=>c.id!==id);S.products=S.products.filter(p=>p.catId!==id);renderAdmin();}
 function removeProd(id){S.products=S.products.filter(p=>p.id!==id);renderAdmin();}
@@ -1908,7 +1928,7 @@ function renderDashboard() {
   } else {
     f2Grid.innerHTML = f2Keys.map(pid => {
       const d = f2Data[pid];
-      const sent = _opSentTotal ? _opSentTotal(pid, dashDate) : 0;
+      const sent = (_opSentTracked||_opSentTotal) ? (_opSentTracked||_opSentTotal)(pid, dashDate) : 0;
       const f2Available = sent - d.delivered; // physically in F2 = sent minus delivered
       const pending = d.required - d.packed - d.delivered;
       const cat = S.categories.find(c => c.id === d.catId);
@@ -2028,7 +2048,7 @@ async function loadFromDB() {
     }));
     S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||''}));
     S.categories  = cats.map(c => ({id:c.id, name:c.name, type:c.type||'linen'}));
-    S.products    = prods.map(p => ({id:p.id, name:p.name, catId:p.cat_id}));
+    S.products    = prods.map(p => ({id:p.id, name:p.name, catId:p.cat_id, trackStock:p.track_stock !== false}));
 
     custProds = {};
     cpRows.forEach(r => {
@@ -2184,8 +2204,9 @@ const _origAddProduct = addProduct;
 addProduct = async function() {
   const n = document.getElementById('np-name').value.trim(); const c = document.getElementById('np-cat').value;
   if (!n||!c) return alert('Enter name and category.');
-  const prod = {id:uid(),name:n,catId:c};
-  try { await _post('products',[{id:prod.id,name:prod.name,cat_id:prod.catId}]); } catch(e) { return alert('DB error: '+e.message); }
+  const track = document.getElementById('np-track')?.checked !== false;
+  const prod = {id:uid(),name:n,catId:c,trackStock:track};
+  try { await _post('products',[{id:prod.id,name:prod.name,cat_id:prod.catId,track_stock:track}]); } catch(e) { return alert('DB error: '+e.message); }
   S.products.push(prod); document.getElementById('np-name').value=''; renderAdmin(); _toast('✓ Product added', 2000);
 };
 
@@ -3001,11 +3022,9 @@ function renderOperation() {
     reqGrid.innerHTML = '<div style="font-size:13px;color:var(--muted)">No orders found for ' + fmtD(date) + '. Check Order / Pack page.</div>';
   }
 
-  // ── Entry grid: products to send ──
-  // Show all products that have requirements OR all active products
-  const entryProds = reqKeys.length
-    ? reqKeys.map(pid => ({id: pid, name: required[pid].name, catId: required[pid].catId}))
-    : S.products;
+  // ── Entry grid: ALL products (tracked or not) ──
+  // Untracked products (mats etc.) can be transferred but won't affect stock
+  const entryProds = S.products;
 
   const entryGrid = document.getElementById('op-entry-grid');
   entryGrid.innerHTML = entryProds.map(p => {
@@ -3015,10 +3034,12 @@ function renderOperation() {
     const catType = cat?.type || 'linen';
     const borderColor = catType === 'towel' ? '#93c5fd' : '#86efac';
     const qty = opQtys[pid] || 0;
-    return `<div style="background:#fff;border:2px solid ${qty>0?borderColor:'var(--border)'};border-radius:14px;padding:16px;transition:border-color .2s">
-      <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+    const tracked = p.trackStock !== false;
+    return `<div style="background:#fff;border:2px solid ${qty>0?borderColor:'var(--border)'};border-radius:14px;padding:16px;transition:border-color .2s;${!tracked?'opacity:0.85':''}">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         ${pname}
         ${cat ? `<span class="badge ${catType==='towel'?'bg-blue':'bg-green'}" style="font-size:9px">${cat.name}</span>` : ''}
+        ${!tracked ? `<span class="badge bg-gray" style="font-size:9px" title="Not tracked in stock">🔧 Op Only</span>` : ''}
       </div>
       <div id="opq-${pid}"
         onclick="openKP('${pname}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;_updateOpCard('${pid}',v);},${qty})"
@@ -3093,10 +3114,18 @@ async function saveOpTransfer() {
 }
 
 function _opSentTotal(productId, date) {
+  // Returns total sent regardless of tracking — for Operation display
   if(!S.opTransfers) return 0;
   return S.opTransfers
     .filter(t => t.productId === productId && t.date === date)
     .reduce((a,b) => a+b.qty, 0);
+}
+
+function _opSentTracked(productId, date) {
+  // Returns sent qty ONLY for stock-tracked products — for F2 stock calc
+  const p = S.products.find(x => x.id === productId);
+  if(p && p.trackStock === false) return 0; // untracked — no stock effect
+  return _opSentTotal(productId, date);
 }
 
 function _opUsedTotal(productId, date) {
@@ -3116,8 +3145,12 @@ function renderF2Stock(date) {
   if(!el) return;
   
   // Get all products that have any transfers OR orders for this date
+  // Only show tracked products in F2 stock
   const productIds = new Set();
-  (S.opTransfers||[]).filter(t => t.date === date).forEach(t => productIds.add(t.productId));
+  (S.opTransfers||[]).filter(t => t.date === date).forEach(t => {
+    const p = S.products.find(x => x.id === t.productId);
+    if(p && p.trackStock !== false) productIds.add(t.productId);
+  });
   S.orders.filter(o => o.deliveryDate === date).forEach(o => o.items.forEach(it => productIds.add(it.productId)));
   
   if(!productIds.size) { el.innerHTML = '<div style="color:var(--muted);font-size:13px">No data for this date</div>'; return; }
@@ -3314,6 +3347,24 @@ function _updateOpCard(pid, qty) {
     // update border color
     card.style.borderColor = qty > 0 ? '#86efac' : '#e2e4ec';
   }
+}
+
+
+// ═══════════════════════════════════════
+// PRODUCT TRACK STOCK TOGGLE
+// ═══════════════════════════════════════
+async function toggleProdTrack(pid, tracked) {
+  const p = S.products.find(x => x.id === pid);
+  if(!p) return;
+  p.trackStock = tracked;
+  try {
+    await _patch('products', {track_stock: tracked}, '?id=eq.'+pid);
+    _toast((tracked ? '✓ Now tracked in stock' : '🔧 Op Only — no stock effect'), 2000);
+  } catch(e) {
+    console.warn('toggleProdTrack:', e.message);
+    _toast('Saved locally', 1500);
+  }
+  renderAdmin();
 }
 
 async function ensureDeliveryDaysColumn() {
