@@ -1684,12 +1684,7 @@ function renderCCdriver(){
   }
   renderCCdayDrivers();
 }
-function saveCCdriver_OLD_REPLACED(){ // replaced by new version
-  const c=S.customers.find(x=>x.id===ccId);if(!c)return;
-  // Update orders too
-  S.orders.filter(o=>o.customerId===ccId).forEach(o=>{o.driverId=c.driverId;o.routeOrder=c.routeOrder;});
-  renderAdmin();alert('Driver assignment saved.');
-}
+
 function renderCCstock(){
   document.getElementById('cc-stock-list').innerHTML=S.products.map(p=>{
     const se=S.stockEntries.find(s=>s.customerId===ccId&&s.productId===p.id);
@@ -2273,7 +2268,6 @@ saveCCdetails = async function() {
 };
 
 // saveCCdriver — multi-day version
-const _origSaveCCdriver = saveCCdriver;
 saveCCdriver = async function() {
   const c = S.customers.find(x=>x.id===ccId); if (!c) return;
   // Collect all day-driver rows
