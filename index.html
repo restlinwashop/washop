@@ -2043,7 +2043,10 @@ async function loadFromDB() {
 
     S.customers = custs.map(c => ({
       id:c.id, name:c.name, address:c.address||'', frequency:c.frequency||'Weekly',
-      dueDay:c.due_day||4, deliveryDays: c.delivery_days ? JSON.parse(c.delivery_days) : [c.due_day||4], email:c.email||'', phone:c.phone||'',
+      dueDay:c.due_day||4,
+      deliveryDays: c.delivery_days ? JSON.parse(c.delivery_days) : [c.due_day||4],
+      dayDrivers: c.day_drivers ? (() => { try { return JSON.parse(c.day_drivers); } catch(e) { return null; } })() : null,
+      email:c.email||'', phone:c.phone||'',
       notes:c.notes||'', active:c.active!==0, driverId:c.driver_id||null, routeOrder:c.route_order||99
     }));
     S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||''}));
@@ -2119,7 +2122,8 @@ saveReceiving = async function() {
       }
     } else {
       const oid = uid();
-      await _post('orders',[{id:oid,customer_id:c.id,customer_name:c.name,driver_id:c.driverId,route_order:c.routeOrder||99,delivery_date:delivDate,bag_count:1,status:'pending',note:'',is_manual:false,checked_items:{}}]);
+      const _od = getOrderDriver(c.id, delivDate);
+    await _post('orders',[{id:oid,customer_id:c.id,customer_name:c.name,driver_id:_od.driverId,route_order:_od.routeOrder||99,delivery_date:delivDate,bag_count:1,status:'pending',note:'',is_manual:false,checked_items:{}}]);
       await _post('order_items', items.map(it => ({id:uid(),order_id:oid,product_id:it.productId,product_name:it.productName,cat_id:it.catId,qty:it.qty})));
     }
     const lid = uid();
@@ -2174,11 +2178,32 @@ deleteOrder = async function() {
 const _origAddCustomer = addCustomer;
 addCustomer = async function() {
   const n = document.getElementById('nc-name').value.trim(); if (!n) return alert('Enter name.');
+  // Read multi-day checkboxes
+  const ncDays = [...document.querySelectorAll('.nc-day-cb:checked')].map(x => parseInt(x.value));
+  if(!ncDays.length) return alert('Select at least one delivery day.');
   const id = uid();
-  const cust = {id,name:n,address:document.getElementById('nc-addr').value.trim(),frequency:document.getElementById('nc-freq').value,dueDay:parseInt(document.getElementById('nc-day').value),email:document.getElementById('nc-email').value.trim(),phone:document.getElementById('nc-phone').value.trim(),notes:'',active:1,driverId:null,routeOrder:99};
-  try { await _post('customers',[{id:cust.id,name:cust.name,address:cust.address,frequency:cust.frequency,due_day:cust.dueDay,email:cust.email,phone:cust.phone,notes:'',active:1,driver_id:null,route_order:99}]); } catch(e) { return alert('DB error: '+e.message); }
+  const cust = {
+    id, name:n,
+    address: document.getElementById('nc-addr').value.trim(),
+    frequency: document.getElementById('nc-freq').value,
+    dueDay: ncDays[0],
+    deliveryDays: ncDays,
+    email: document.getElementById('nc-email').value.trim(),
+    phone: document.getElementById('nc-phone').value.trim(),
+    notes:'', active:1, driverId:null, routeOrder:99
+  };
+  try {
+    await _post('customers',[{
+      id:cust.id, name:cust.name, address:cust.address,
+      frequency:cust.frequency, due_day:cust.dueDay,
+      delivery_days:JSON.stringify(ncDays),
+      email:cust.email, phone:cust.phone,
+      notes:'', active:1, driver_id:null, route_order:99
+    }]);
+  } catch(e) { return alert('DB error: '+e.message); }
   S.customers.push(cust);
   ['nc-name','nc-addr','nc-email','nc-phone'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.nc-day-cb').forEach(cb => cb.checked = false);
   renderAdmin(); _toast('✓ Customer added', 2000);
 };
 
@@ -2245,20 +2270,83 @@ saveCCdetails = async function() {
   document.getElementById('cc-hdr-name').textContent=c.name; document.getElementById('cc-hdr-meta').textContent=c.frequency+' · '+c.address;
 };
 
-// saveCCdriver
+// saveCCdriver — multi-day version
 const _origSaveCCdriver = saveCCdriver;
 saveCCdriver = async function() {
   const c = S.customers.find(x=>x.id===ccId); if (!c) return;
-  const did = document.getElementById('cc-driver-sel').value||null;
-  const ro = parseInt(document.getElementById('cc-route-order').value)||99;
+  // Collect all day-driver rows
+  const rows = document.querySelectorAll('.dd-row');
+  const dayDrivers = []; // [{day, driverId, routeOrder}]
+  rows.forEach(row => {
+    const day = parseInt(row.querySelector('.dd-day-sel')?.value);
+    const did = row.querySelector('.dd-drv-sel')?.value || null;
+    const ro  = parseInt(row.querySelector('.dd-route-inp')?.value) || 99;
+    if(day) dayDrivers.push({day, driverId: did, routeOrder: ro});
+  });
+  // Primary driver = first entry (or unassigned)
+  const primary = dayDrivers[0];
+  const primaryDid = primary?.driverId || null;
+  const primaryRo  = primary?.routeOrder || 99;
+  // Save to customer record
+  const ddJson = JSON.stringify(dayDrivers);
   try {
-    await _patch('customers',{driver_id:did,route_order:ro},'?id=eq.'+ccId);
-    await _patch('orders',{driver_id:did,route_order:ro},'?customer_id=eq.'+ccId+'&status=in.(pending,packed)');
+    await _patch('customers', {
+      driver_id: primaryDid,
+      route_order: primaryRo,
+      day_drivers: ddJson
+    }, '?id=eq.'+ccId);
   } catch(e) { console.warn('saveCCdriver DB:', e); }
-  c.driverId=did; c.routeOrder=ro;
-  S.orders.forEach(o=>{ if(o.customerId===ccId&&o.status!=='delivered'){o.driverId=did;o.routeOrder=ro;} });
-  renderAdmin(); _toast('✓ Driver saved', 2000);
+  c.driverId = primaryDid;
+  c.routeOrder = primaryRo;
+  c.dayDrivers = dayDrivers;
+  renderAdmin(); _toast('✓ Driver/day assignments saved', 2000);
 };
+
+function addDayDriverRow(day, driverId, routeOrder) {
+  const list = document.getElementById('cc-day-driver-list');
+  if(!list) return;
+  const DAYS = ['','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayOpts = [1,2,3,4,5,6].map(d =>
+    `<option value="${d}" ${d==day?'selected':''}>${DAYS[d]}</option>`
+  ).join('');
+  const drvOpts = '<option value="">Unassigned</option>' + S.drivers.map(d =>
+    `<option value="${d.id}" ${d.id===driverId?'selected':''}>${d.name}</option>`
+  ).join('');
+  const row = document.createElement('div');
+  row.className = 'dd-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)';
+  row.innerHTML = `
+    <select class="dd-day-sel" style="width:90px">
+      <option value="">Day...</option>${dayOpts}
+    </select>
+    <select class="dd-drv-sel" style="flex:1">${drvOpts}</select>
+    <input type="number" class="dd-route-inp" value="${routeOrder||''}" placeholder="Route #" min="1" style="width:80px;text-align:center">
+    <button class="btn btn-xs btn-danger" onclick="this.closest('.dd-row').remove()">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function renderCCdayDrivers() {
+  const list = document.getElementById('cc-day-driver-list');
+  if(!list) return;
+  list.innerHTML = '';
+  const c = S.customers.find(x=>x.id===ccId); if(!c) return;
+  const entries = c.dayDrivers && c.dayDrivers.length
+    ? c.dayDrivers
+    : [{day: c.dueDay||4, driverId: c.driverId||null, routeOrder: c.routeOrder||99}];
+  entries.forEach(e => addDayDriverRow(e.day, e.driverId, e.routeOrder));
+}
+
+// Also update getOrderDriver — determines which driver for a specific delivery date
+function getOrderDriver(custId, deliveryDate) {
+  const c = S.customers.find(x=>x.id===custId); if(!c) return null;
+  if(c.dayDrivers && c.dayDrivers.length) {
+    const wd = new Date(deliveryDate+'T00:00:00').getDay();
+    const match = c.dayDrivers.find(dd => dd.day === wd);
+    if(match) return {driverId: match.driverId, routeOrder: match.routeOrder};
+  }
+  return {driverId: c.driverId, routeOrder: c.routeOrder||99};
+}
 
 // saveCCstock
 const _origSaveCCstock = saveCCstock;
