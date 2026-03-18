@@ -3626,11 +3626,11 @@ async function deleteCustomer(id, name) {
 // Laundry bag product IDs — looked up by name at runtime
 function getLaundryBagId(type) {
   if(type === 'linen' || type === 'purple') {
-    const p = S.products.find(x => x.name.toLowerCase().includes('purple') || x.name.toLowerCase().includes('laundry bag') && x.name.toLowerCase().includes('purple'));
+    const p = S.products.find(x => /laundry bag.*purple|purple.*bag/i.test(x.name) || x.name.toLowerCase() === 'laundry bag (purple)');
     return p?.id || null;
   }
   if(type === 'towel' || type === 'black') {
-    const p = S.products.find(x => x.name.toLowerCase().includes('black') && x.name.toLowerCase().includes('bag') || x.name.toLowerCase().includes('laundry bag') && x.name.toLowerCase().includes('black'));
+    const p = S.products.find(x => /laundry bag.*black|black.*bag/i.test(x.name) || x.name.toLowerCase() === 'laundry bag (black)');
     return p?.id || null;
   }
   return null;
@@ -3640,22 +3640,51 @@ function getBagProductsForCustomer(custId) {
   const c = S.customers.find(x => x.id === custId);
   if(!c || !c.custType) return [];
   const bags = [];
-  const purpleProd = S.products.find(p => /purple.*bag|laundry.*bag.*purple|bag.*purple/i.test(p.name));
-  const blackProd  = S.products.find(p => /black.*bag|laundry.*bag.*black|bag.*black/i.test(p.name));
+  // Match any product name containing 'purple' OR ('bag' + 'linen'/'laundry')
+  const purpleProd = S.products.find(p =>
+    /purple/i.test(p.name) ||
+    (/bag/i.test(p.name) && /linen/i.test(p.name))
+  );
+  // Match any product name containing 'black' + 'bag'
+  const blackProd = S.products.find(p =>
+    (/black/i.test(p.name) && /bag/i.test(p.name)) ||
+    (/bag/i.test(p.name) && /towel/i.test(p.name))
+  );
   if((c.custType === 'linen' || c.custType === 'both') && purpleProd) bags.push(purpleProd);
   if((c.custType === 'towel' || c.custType === 'both') && blackProd)  bags.push(blackProd);
   return bags;
 }
 
+// Debug helper — call from console to see what bag products are found
+function debugBags() {
+  const purple = S.products.find(p => /purple/i.test(p.name) || (/bag/i.test(p.name) && /linen/i.test(p.name)));
+  const black  = S.products.find(p => (/black/i.test(p.name) && /bag/i.test(p.name)) || (/bag/i.test(p.name) && /towel/i.test(p.name)));
+  console.log('Purple bag product:', purple?.name, purple?.id);
+  console.log('Black bag product:', black?.name, black?.id);
+  console.log('All products:', S.products.map(p => p.name));
+}
+
 // Auto-assign laundry bags when customer type is set
 async function autoAssignBags(custId) {
   const bags = getBagProductsForCustomer(custId);
+  if(!bags.length) {
+    console.warn('autoAssignBags: no bag products found. Check product names contain "purple"/"black"+"bag"');
+    _toast('⚠ No bag products found — check product names in Admin', 4000);
+    return;
+  }
   const s = getCustProds(custId);
+  let assigned = [];
   for(const p of bags) {
     if(!s.has(p.id)) {
       s.add(p.id);
       await _post('cust_products', [{cust_id: custId, product_id: p.id}]).catch(()=>{});
+      assigned.push(p.name);
     }
+  }
+  if(assigned.length) {
+    _toast('✓ Auto-assigned: ' + assigned.join(', '), 3000);
+  } else {
+    _toast('Bags already assigned', 2000);
   }
 }
 
