@@ -3662,16 +3662,23 @@ function debugBags() {
 
 // Auto-assign laundry bags when customer type is set
 async function autoAssignBags(custId, overrideType) {
-  console.log('autoAssignBags called:', custId, overrideType);
-  console.log('All products:', S.products.map(p=>p.name));
+  const purpleProd = S.products.find(p => /laundry bag \(purple\)/i.test(p.name));
+  const blackProd  = S.products.find(p => /laundry bag \(black\)/i.test(p.name));
   const bags = getBagProductsForCustomer(custId, overrideType);
-  console.log('Bags found:', bags.map(p=>p.name));
   if(!bags.length) {
-    console.warn('autoAssignBags: no bag products found.');
-    _toast('⚠ No bag products found — check product names in Admin', 4000);
+    _toast('⚠ No bag products found in Admin > Products', 4000);
     return;
   }
   const s = getCustProds(custId);
+  // Remove WRONG bag type first
+  const wrongBags = [purpleProd, blackProd].filter(p => p && !bags.includes(p));
+  for(const p of wrongBags) {
+    if(s.has(p.id)) {
+      s.delete(p.id);
+      await _del('cust_products', '?cust_id=eq.'+custId+'&product_id=eq.'+p.id).catch(()=>{});
+    }
+  }
+  // Add correct bag(s)
   let assigned = [];
   for(const p of bags) {
     if(!s.has(p.id)) {
@@ -3680,11 +3687,7 @@ async function autoAssignBags(custId, overrideType) {
       assigned.push(p.name);
     }
   }
-  if(assigned.length) {
-    _toast('✓ Auto-assigned: ' + assigned.join(', '), 3000);
-  } else {
-    _toast('Bags already assigned', 2000);
-  }
+  if(assigned.length) _toast('✓ Bags updated: ' + assigned.join(', '), 3000);
 }
 
 // ═══════════════════════════════════════
