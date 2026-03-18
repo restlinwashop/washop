@@ -3639,20 +3639,13 @@ function getLaundryBagId(type) {
   return null;
 }
 
-function getBagProductsForCustomer(custId) {
+function getBagProductsForCustomer(custId, overrideType) {
   const c = S.customers.find(x => x.id === custId);
-  if(!c || !c.custType) return [];
+  const custType = overrideType || (c && c.custType);
+  if(!custType) return [];
   const bags = [];
-  // Match any product name containing 'purple' OR ('bag' + 'linen'/'laundry')
-  const purpleProd = S.products.find(p =>
-    /purple/i.test(p.name) ||
-    (/bag/i.test(p.name) && /linen/i.test(p.name))
-  );
-  // Match any product name containing 'black' + 'bag'
-  const blackProd = S.products.find(p =>
-    (/black/i.test(p.name) && /bag/i.test(p.name)) ||
-    (/bag/i.test(p.name) && /towel/i.test(p.name))
-  );
+  const purpleProd = S.products.find(p => /laundry bag \(purple\)/i.test(p.name));
+  const blackProd  = S.products.find(p => /laundry bag \(black\)/i.test(p.name));
   if((custType === 'linen' || custType === 'both') && purpleProd) bags.push(purpleProd);
   if((custType === 'towel' || custType === 'both') && blackProd)  bags.push(blackProd);
   return bags;
