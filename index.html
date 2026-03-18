@@ -2160,8 +2160,10 @@ async function loadFromDB() {
       if (!custProds[r.cust_id]) custProds[r.cust_id] = new Set();
       custProds[r.cust_id].add(r.product_id);
     });
+    // Customers with no cust_products entries get empty set (not all products)
+    // They must have products explicitly assigned via Customer Card > Products
     S.customers.forEach(c => {
-      if (!custProds[c.id]) custProds[c.id] = new Set(S.products.map(p => p.id));
+      if (!custProds[c.id]) custProds[c.id] = new Set();
     });
 
     const imap = {};
@@ -3667,9 +3669,12 @@ function debugBags() {
 
 // Auto-assign laundry bags when customer type is set
 async function autoAssignBags(custId, overrideType) {
+  console.log('autoAssignBags called:', custId, overrideType);
+  console.log('All products:', S.products.map(p=>p.name));
   const bags = getBagProductsForCustomer(custId, overrideType);
+  console.log('Bags found:', bags.map(p=>p.name));
   if(!bags.length) {
-    console.warn('autoAssignBags: no bag products found. Check product names contain "purple"/"black"+"bag"');
+    console.warn('autoAssignBags: no bag products found.');
     _toast('⚠ No bag products found — check product names in Admin', 4000);
     return;
   }
