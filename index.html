@@ -564,6 +564,14 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
 </div></div>
           <div class="field" style="min-width:160px"><label>Email</label><input id="nc-email" type="email"></div>
           <div class="field" style="min-width:120px"><label>Phone</label><input id="nc-phone"></div>
+          <div class="field" style="min-width:120px"><label>Type</label>
+            <select id="nc-ctype">
+              <option value="">Not set</option>
+              <option value="linen">🟣 Linen</option>
+              <option value="towel">⚫ Towel</option>
+              <option value="both">Both</option>
+            </select>
+          </div>
           <button class="btn btn-primary" style="height:40px;margin-top:21px" onclick="addCustomer()">Add</button>
         </div>
       </div>
@@ -839,6 +847,30 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
     </div>
   </div>
 
+
+  <!-- EDIT PRODUCT MODAL -->
+  <div class="modal-overlay" id="ep-modal">
+    <div class="modal" style="width:420px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700">Edit Product</div>
+        <button class="btn btn-sm btn-secondary" onclick="closeEP()">✕</button>
+      </div>
+      <div class="field"><label>Name</label><input id="ep-name"></div>
+      <div class="field"><label>Category</label><select id="ep-cat"></select></div>
+      <div class="field">
+        <label>Track in Stock</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:500">
+          <input type="checkbox" id="ep-track" style="width:auto;cursor:pointer">
+          Yes — affects F2 stock &amp; orders
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-secondary" onclick="closeEP()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEP()">Save</button>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <!-- ════ KEYPAD MODAL ════ -->
@@ -891,6 +923,15 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
           </div></div>
         <div class="field"><label>Notes</label><textarea id="cc-notes" rows="2"></textarea></div>
         <div class="field"><label>Status</label><select id="cc-active"><option value="1">Active</option><option value="0">Inactive</option></select></div>
+        <div class="field"><label>Customer Type</label>
+          <select id="cc-ctype">
+            <option value="">Not set</option>
+            <option value="linen">🟣 Linen (Purple Bag)</option>
+            <option value="towel">⚫ Towel (Black Bag)</option>
+            <option value="both">🟣⚫ Both</option>
+          </select>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Sets automatic laundry bag assignment</div>
+        </div>
       </div>
       <button class="btn btn-primary" onclick="saveCCdetails()">Save Details</button>
     </div>
@@ -1649,6 +1690,8 @@ function openCC(id){
   });
   document.getElementById('cc-notes').value=c.notes||'';
   document.getElementById('cc-active').value=c.active?'1':'0';
+  const ctEl = document.getElementById('cc-ctype');
+  if(ctEl) ctEl.value = c.custType||'';
   // Reset tabs
   document.querySelectorAll('.cc-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.cc-section').forEach(s=>s.classList.remove('active'));
@@ -1810,6 +1853,7 @@ function renderAdmin(){
       <div class="ali-meta">${c.frequency} · ${DAYS[c.dueDay]||'?'}</div>
       <div class="ali-meta">${drv?drv.name+' #'+(c.routeOrder||'—'):'Unassigned'}</div>
       <span class="badge ${c.active?'bg-green':'bg-gray'}">${c.active?'ACTIVE':'INACTIVE'}</span>
+      ${c.custType==='linen'?'<span class="badge bg-purple">🟣 Linen</span>':c.custType==='towel'?'<span class="badge bg-gray" style="background:#1f2937;color:#fff">⚫ Towel</span>':c.custType==='both'?'<span class="badge bg-purple">🟣⚫ Both</span>':''}
       <span style="font-size:12px;color:var(--accent2)">→ Open</span>
       <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteCustomer('${c.id}','${c.name.replace(/&#39;/g,'')}')">Delete</button>
     </div>`;
@@ -1839,10 +1883,11 @@ function renderAdmin(){
       <div class="ali-name">${p.name}</div>
       <div class="ali-meta">${cat?.name||'?'}</div>
       <span class="badge ${cat?.type==='towel'?'bg-blue':'bg-green'}">${cat?.type||'?'}</span>
-      <span class="badge ${tracked?'bg-green':'bg-gray'}" title="${tracked?'Tracked in stock':'Not tracked in stock'}">${tracked?'📦 Stock':'🔧 Op Only'}</span>
+      <span class="badge ${tracked?'bg-green':'bg-gray'}">${tracked?'📦 Stock':'🔧 Op Only'}</span>
       <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;margin:0;font-weight:500;text-transform:none;letter-spacing:0">
         <input type="checkbox" ${tracked?'checked':''} onchange="toggleProdTrack('${p.id}',this.checked)" style="width:auto;cursor:pointer"> Track
       </label>
+      <button class="btn btn-xs btn-secondary" onclick="event.stopPropagation();openEditProd('${p.id}')">✏ Edit</button>
       <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removeProd('${p.id}')">Remove</button>
     </div>`;
   }).join('')||'<div class="empty">No products</div>';
@@ -2100,6 +2145,7 @@ async function loadFromDB() {
     S.customers = custs.map(c => ({
       id:c.id, name:c.name, address:c.address||'', frequency:c.frequency||'Weekly',
       dueDay:c.due_day||4,
+      custType: c.cust_type||null,
       deliveryDays: c.delivery_days ? JSON.parse(c.delivery_days) : [c.due_day||4],
       dayDrivers: c.day_drivers ? (() => { try { return JSON.parse(c.day_drivers); } catch(e) { return null; } })() : null,
       email:c.email||'', phone:c.phone||'',
@@ -2203,6 +2249,8 @@ confirmDelivery = async function(id) {
   try {
     await _patch('orders',{status:'delivered'},'?id=eq.'+id);
     await _post('history', o.items.map(it => ({id:uid(),date:todayStr(),customer_id:o.customerId,product_id:it.productId,qty:it.qty,type:'dispatch'})));
+    // Deduct laundry bags from stock
+    await deductBagsOnDelivery(o).catch(()=>{});
   } catch(e) { console.warn('delivery DB:', e); }
   _origConfirmDelivery(id);
 };
@@ -2238,6 +2286,7 @@ addCustomer = async function() {
   const ncDays = [...document.querySelectorAll('.nc-day-cb:checked')].map(x => parseInt(x.value));
   if(!ncDays.length) return alert('Select at least one delivery day.');
   const id = uid();
+  const ncCustType = document.getElementById('nc-ctype')?.value || null;
   const cust = {
     id, name:n,
     address: document.getElementById('nc-addr').value.trim(),
@@ -2246,7 +2295,7 @@ addCustomer = async function() {
     deliveryDays: ncDays,
     email: document.getElementById('nc-email').value.trim(),
     phone: document.getElementById('nc-phone').value.trim(),
-    notes:'', active:1, driverId:null, routeOrder:99
+    notes:'', active:1, driverId:null, routeOrder:99, custType: ncCustType
   };
   try {
     await _post('customers',[{
@@ -2320,8 +2369,9 @@ const _origSaveCCdetails = saveCCdetails;
 saveCCdetails = async function() {
   const c = S.customers.find(x=>x.id===ccId); if (!c) return;
   const ccDays=[...document.querySelectorAll('.cc-day-cb:checked')].map(x=>parseInt(x.value));
-  const upd = {name:document.getElementById('cc-name').value,address:document.getElementById('cc-addr').value,frequency:document.getElementById('cc-freq').value,dueDay:ccDays[0]||4,deliveryDays:ccDays.length?ccDays:[4],email:document.getElementById('cc-email').value,phone:document.getElementById('cc-phone').value,notes:document.getElementById('cc-notes').value,active:parseInt(document.getElementById('cc-active').value)===1};
-  try { await _patch('customers',{name:upd.name,address:upd.address,frequency:upd.frequency,due_day:upd.dueDay,delivery_days:JSON.stringify(upd.deliveryDays),email:upd.email,phone:upd.phone,notes:upd.notes,active:upd.active?1:0},'?id=eq.'+ccId); } catch(e) { alert('DB error: '+e.message); return; }
+  const newCustType = document.getElementById('cc-ctype')?.value || null;
+  const upd = {name:document.getElementById('cc-name').value,address:document.getElementById('cc-addr').value,frequency:document.getElementById('cc-freq').value,dueDay:ccDays[0]||4,deliveryDays:ccDays.length?ccDays:[4],email:document.getElementById('cc-email').value,phone:document.getElementById('cc-phone').value,notes:document.getElementById('cc-notes').value,active:parseInt(document.getElementById('cc-active').value)===1,custType:newCustType};
+  try { await _patch('customers',{name:upd.name,address:upd.address,frequency:upd.frequency,due_day:upd.dueDay,delivery_days:JSON.stringify(upd.deliveryDays),email:upd.email,phone:upd.phone,notes:upd.notes,active:upd.active?1:0,cust_type:upd.custType||null},'?id=eq.'+ccId); } catch(e) { alert('DB error: '+e.message); return; }
   Object.assign(c, upd); renderAdmin(); _toast('✓ Saved', 2000);
   document.getElementById('cc-hdr-name').textContent=c.name; document.getElementById('cc-hdr-meta').textContent=c.frequency+' · '+c.address;
 };
@@ -3567,6 +3617,121 @@ async function deleteCustomer(id, name) {
     alert('Error deleting customer: ' + e.message);
   }
 }
+
+
+// ═══════════════════════════════════════
+// CUSTOMER TYPE (Linen / Towel / Both)
+// ═══════════════════════════════════════
+
+// Laundry bag product IDs — looked up by name at runtime
+function getLaundryBagId(type) {
+  if(type === 'linen' || type === 'purple') {
+    const p = S.products.find(x => x.name.toLowerCase().includes('purple') || x.name.toLowerCase().includes('laundry bag') && x.name.toLowerCase().includes('purple'));
+    return p?.id || null;
+  }
+  if(type === 'towel' || type === 'black') {
+    const p = S.products.find(x => x.name.toLowerCase().includes('black') && x.name.toLowerCase().includes('bag') || x.name.toLowerCase().includes('laundry bag') && x.name.toLowerCase().includes('black'));
+    return p?.id || null;
+  }
+  return null;
+}
+
+function getBagProductsForCustomer(custId) {
+  const c = S.customers.find(x => x.id === custId);
+  if(!c || !c.custType) return [];
+  const bags = [];
+  const purpleProd = S.products.find(p => /purple.*bag|laundry.*bag.*purple|bag.*purple/i.test(p.name));
+  const blackProd  = S.products.find(p => /black.*bag|laundry.*bag.*black|bag.*black/i.test(p.name));
+  if((c.custType === 'linen' || c.custType === 'both') && purpleProd) bags.push(purpleProd);
+  if((c.custType === 'towel' || c.custType === 'both') && blackProd)  bags.push(blackProd);
+  return bags;
+}
+
+// Auto-assign laundry bags when customer type is set
+async function autoAssignBags(custId) {
+  const bags = getBagProductsForCustomer(custId);
+  const s = getCustProds(custId);
+  for(const p of bags) {
+    if(!s.has(p.id)) {
+      s.add(p.id);
+      await _post('cust_products', [{cust_id: custId, product_id: p.id}]).catch(()=>{});
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// EDIT PRODUCT
+// ═══════════════════════════════════════
+let epId = null;
+
+function openEditProd(id) {
+  epId = id;
+  const p = S.products.find(x => x.id === id); if(!p) return;
+  document.getElementById('ep-name').value = p.name;
+  document.getElementById('ep-track').checked = p.trackStock !== false;
+  // Populate category select
+  const sel = document.getElementById('ep-cat');
+  sel.innerHTML = S.categories.map(c =>
+    `<option value="${c.id}" ${c.id===p.catId?'selected':''}>${c.name} (${c.type})</option>`
+  ).join('');
+  document.getElementById('ep-modal').classList.add('open');
+}
+
+function closeEP() {
+  document.getElementById('ep-modal').classList.remove('open');
+  epId = null;
+}
+
+async function saveEP() {
+  const p = S.products.find(x => x.id === epId); if(!p) return;
+  const newName  = document.getElementById('ep-name').value.trim();
+  const newCat   = document.getElementById('ep-cat').value;
+  const newTrack = document.getElementById('ep-track').checked;
+  if(!newName || !newCat) return alert('Name and category required.');
+  try {
+    await _patch('products', {name: newName, cat_id: newCat, track_stock: newTrack}, '?id=eq.'+epId);
+    p.name = newName; p.catId = newCat; p.trackStock = newTrack;
+    closeEP();
+    renderAdmin();
+    _toast('✓ Product updated', 2000);
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+// ═══════════════════════════════════════
+// BAG DEDUCTION ON DELIVERY
+// ═══════════════════════════════════════
+// When an order is delivered, deduct bags from stock
+// bag count is already on the order — we just need to know which bag type
+
+async function deductBagsOnDelivery(order) {
+  const c = S.customers.find(x => x.id === order.customerId);
+  if(!c || !c.custType) return;
+  const bags = getBagProductsForCustomer(order.customerId);
+  for(const bagProd of bags) {
+    const se = S.stockEntries.find(s => s.productId === bagProd.id);
+    if(se) {
+      const newStock = Math.max(0, (se.currentStock||0) - order.bagCount);
+      se.currentStock = newStock;
+      await _patch('stock_entries', {current_stock: newStock},
+        '?product_id=eq.'+bagProd.id+'&customer_id=eq.'+order.customerId
+      ).catch(()=>{
+        // Try global stock (bags tracked globally, not per customer)
+        const global = S.stockEntries.find(s => s.productId === bagProd.id && !s.customerId);
+        if(global) {
+          global.currentStock = Math.max(0, (global.currentStock||0) - order.bagCount);
+          _patch('stock_entries', {current_stock: global.currentStock},
+            '?product_id=eq.'+bagProd.id
+          ).catch(()=>{});
+        }
+      });
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// LOAD customer type from DB
+// ═══════════════════════════════════════
+// Patch loadFromDB to include cust_type
 
 async function ensureDeliveryDaysColumn() {
   // Try to add the column if it doesn't exist - will fail silently if already exists
