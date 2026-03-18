@@ -1777,10 +1777,11 @@ function renderCCprods(){
   const totalProds = S.products.length;
   const assignedCount = S.products.filter(p=>assigned.has(p.id)).length;
   document.getElementById('cc-prod-list').innerHTML=`
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-      <span style="font-size:12px;color:var(--muted)">${assignedCount} of ${totalProds} selected</span>
-      <button class="btn btn-xs btn-secondary" onclick="selectAllProds()">✓ Select All</button>
-      <button class="btn btn-xs btn-danger" onclick="unselectAllProds()">✕ Unselect All</button>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);flex:1">${assignedCount} of ${totalProds} selected</span>
+      <button class="btn btn-xs btn-secondary" onclick="selectAllProds()">✓ All</button>
+      <button class="btn btn-xs btn-danger" onclick="unselectAllProds()">✕ None</button>
+      <button class="btn btn-xs btn-primary" onclick="saveAllProds()" style="background:#16a34a;border-color:#16a34a">💾 Save All</button>
     </div>
   `+S.categories.map(cat=>`
     <div style="margin-bottom:14px">
@@ -2515,8 +2516,28 @@ saveCCstock = async function() {
 const _origToggleCustProd = toggleCustProd;
 toggleCustProd = async function(cid, pid, checked) {
   const s = getCustProds(cid);
-  if (checked) { s.add(pid); _post('cust_products',[{cust_id:cid,product_id:pid}]).catch(()=>{}); }
-  else { s.delete(pid); _del('cust_products','?cust_id=eq.'+cid+'&product_id=eq.'+pid).catch(()=>{}); }
+  const prodName = S.products.find(p=>p.id===pid)?.name || pid;
+  if (checked) {
+    s.add(pid);
+    try {
+      await _post('cust_products', [{cust_id:cid, product_id:pid}]);
+      _toast('✓ '+prodName+' added', 1500);
+    } catch(e) {
+      s.delete(pid); // revert local
+      _toast('✗ Failed to save: '+e.message.slice(0,60), 4000);
+      renderCCprods(); // re-render to show correct state
+    }
+  } else {
+    s.delete(pid);
+    try {
+      await _del('cust_products', '?cust_id=eq.'+cid+'&product_id=eq.'+pid);
+      _toast('✓ '+prodName+' removed', 1500);
+    } catch(e) {
+      s.add(pid); // revert local
+      _toast('✗ Failed to save: '+e.message.slice(0,60), 4000);
+      renderCCprods();
+    }
+  }
 };
 
 // setCustPrice
@@ -3721,7 +3742,18 @@ async function autoAssignBags(custId, overrideType) {
       assigned.push(p.name);
     }
   }
-  if(assigned.length) _toast('✓ Bags updated: ' + assigned.join(', '), 3000);
+  if(assigned.length) {
+    // Force a full save to make sure DB is in sync
+    try {
+      const s2 = getCustProds(custId);
+      await _del('cust_products', '?cust_id=eq.'+custId);
+      const rows = [...s2].map(pid => ({cust_id: custId, product_id: pid}));
+      if(rows.length) await _post('cust_products', rows);
+      _toast('✓ Bags saved: ' + assigned.join(', '), 3000);
+    } catch(e) {
+      _toast('✗ Bag save failed: '+e.message.slice(0,50), 4000);
+    }
+  }
 }
 
 // ═══════════════════════════════════════
@@ -3860,6 +3892,35 @@ function exportHistoryCSV() {
   a.click();
   URL.revokeObjectURL(url);
   _toast('✓ Exported '+entries.length+' records', 2500);
+}
+
+
+async function saveAllProds() {
+  if(!ccId) return;
+  const s = getCustProds(ccId);
+  const btn = event.target;
+  btn.textContent = '⏳ Saving...';
+  btn.disabled = true;
+  try {
+    // Delete all existing assignments for this customer
+    await _del('cust_products', '?cust_id=eq.'+ccId);
+    // Re-insert all currently selected
+    const rows = [...s].map(pid => ({cust_id: ccId, product_id: pid}));
+    if(rows.length) {
+      await _post('cust_products', rows);
+    }
+    btn.textContent = '✓ Saved!';
+    btn.style.background = '#16a34a';
+    setTimeout(() => {
+      btn.textContent = '💾 Save All';
+      btn.disabled = false;
+    }, 2000);
+    _toast('✓ Products saved — '+rows.length+' items', 2500);
+  } catch(e) {
+    btn.textContent = '✗ Error';
+    btn.disabled = false;
+    alert('Save failed: '+e.message);
+  }
 }
 
 async function ensureDeliveryDaysColumn() {
