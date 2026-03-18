@@ -924,7 +924,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
         <div class="field"><label>Notes</label><textarea id="cc-notes" rows="2"></textarea></div>
         <div class="field"><label>Status</label><select id="cc-active"><option value="1">Active</option><option value="0">Inactive</option></select></div>
         <div class="field"><label>Customer Type</label>
-          <select id="cc-ctype">
+          <select id="cc-ctype" onchange="if(this.value && ccId){autoAssignBags(ccId, this.value).then(()=>renderCCprods());}">
             <option value="">Not set</option>
             <option value="linen">🟣 Linen (Purple Bag)</option>
             <option value="towel">⚫ Towel (Black Bag)</option>
@@ -2372,7 +2372,8 @@ saveCCdetails = async function() {
   const newCustType = document.getElementById('cc-ctype')?.value || null;
   const upd = {name:document.getElementById('cc-name').value,address:document.getElementById('cc-addr').value,frequency:document.getElementById('cc-freq').value,dueDay:ccDays[0]||4,deliveryDays:ccDays.length?ccDays:[4],email:document.getElementById('cc-email').value,phone:document.getElementById('cc-phone').value,notes:document.getElementById('cc-notes').value,active:parseInt(document.getElementById('cc-active').value)===1,custType:newCustType};
   try { await _patch('customers',{name:upd.name,address:upd.address,frequency:upd.frequency,due_day:upd.dueDay,delivery_days:JSON.stringify(upd.deliveryDays),email:upd.email,phone:upd.phone,notes:upd.notes,active:upd.active?1:0,cust_type:upd.custType||null},'?id=eq.'+ccId); } catch(e) { alert('DB error: '+e.message); return; }
-  Object.assign(c, upd); renderAdmin(); _toast('✓ Saved', 2000);
+  Object.assign(c, upd);   if(upd.custType) { await autoAssignBags(ccId); if(document.getElementById("cc-products").classList.contains("active")) renderCCprods(); }
+  renderAdmin(); _toast('✓ Saved', 2000);
   document.getElementById('cc-hdr-name').textContent=c.name; document.getElementById('cc-hdr-meta').textContent=c.frequency+' · '+c.address;
 };
 
@@ -3650,8 +3651,8 @@ function getBagProductsForCustomer(custId) {
     (/black/i.test(p.name) && /bag/i.test(p.name)) ||
     (/bag/i.test(p.name) && /towel/i.test(p.name))
   );
-  if((c.custType === 'linen' || c.custType === 'both') && purpleProd) bags.push(purpleProd);
-  if((c.custType === 'towel' || c.custType === 'both') && blackProd)  bags.push(blackProd);
+  if((custType === 'linen' || custType === 'both') && purpleProd) bags.push(purpleProd);
+  if((custType === 'towel' || custType === 'both') && blackProd)  bags.push(blackProd);
   return bags;
 }
 
@@ -3665,8 +3666,8 @@ function debugBags() {
 }
 
 // Auto-assign laundry bags when customer type is set
-async function autoAssignBags(custId) {
-  const bags = getBagProductsForCustomer(custId);
+async function autoAssignBags(custId, overrideType) {
+  const bags = getBagProductsForCustomer(custId, overrideType);
   if(!bags.length) {
     console.warn('autoAssignBags: no bag products found. Check product names contain "purple"/"black"+"bag"');
     _toast('⚠ No bag products found — check product names in Admin', 4000);
