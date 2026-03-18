@@ -2367,6 +2367,9 @@ removeProd = async function(id) {
   if(!confirm('Remove product "'+p.name+'"?\nThis will also remove it from all customer assignments.')) return;
   try {
     await _del('cust_products','?product_id=eq.'+id);
+    await _del('op_transfers','?product_id=eq.'+id).catch(()=>{});
+    await _del('order_items','?product_id=eq.'+id).catch(()=>{});
+    await _del('receiving_log_items','?product_id=eq.'+id).catch(()=>{});
     await _del('products','?id=eq.'+id);
     S.products = S.products.filter(x=>x.id!==id);
     // Remove from all custProds sets
