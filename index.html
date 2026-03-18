@@ -1733,8 +1733,13 @@ function renderHistChart(entries){
 // CUSTOMER CARD MODAL
 // ═══════════════════════════════════════════════
 let ccId=null,ccHistChart=null;
-function openCC(id){
+async function openCC(id){
   ccId=id;const c=S.customers.find(x=>x.id===id);if(!c)return;
+  // Always reload fresh product assignments from DB when opening
+  try {
+    const fresh = await _get('cust_products', '?cust_id=eq.'+id+'&select=product_id');
+    custProds[id] = new Set(fresh.map(r => r.product_id));
+  } catch(e) { /* use cached */ }
   document.getElementById('cc-hdr-name').textContent=c.name;
   document.getElementById('cc-hdr-meta').textContent=c.frequency+' · '+c.address;
   document.getElementById('cc-name').value=c.name;
@@ -1842,49 +1847,75 @@ function renderCCprods(){
     </div>`).join('');
 }
 
-function selectAllProds() {
+async function selectAllProds() {
   const s = getCustProds(ccId);
-  S.products.forEach(p => {
-    if(!s.has(p.id)) {
-      s.add(p.id);
-      _post('cust_products',[{cust_id:ccId,product_id:p.id}]).catch(()=>{});
-    }
-  });
+  const toAdd = S.products.filter(p => !s.has(p.id));
+  if(!toAdd.length) return;
+  toAdd.forEach(p => s.add(p.id));
   renderCCprods();
+  try {
+    await _post('cust_products', toAdd.map(p => ({cust_id:ccId, product_id:p.id})));
+    _toast('✓ All products selected', 1500);
+  } catch(e) {
+    if(!e.message.includes('23505')) {
+      toAdd.forEach(p => s.delete(p.id));
+      renderCCprods();
+      _toast('✗ Error: '+e.message.slice(0,50), 3000);
+    } else {
+      _toast('✓ All products selected', 1500);
+    }
+  }
 }
 
-function unselectAllProds() {
+async function unselectAllProds() {
   if(!confirm('Remove all products from this customer?')) return;
   const s = getCustProds(ccId);
-  S.products.forEach(p => {
-    if(s.has(p.id)) {
-      s.delete(p.id);
-      _del('cust_products','?cust_id=eq.'+ccId+'&product_id=eq.'+p.id).catch(()=>{});
-    }
-  });
+  const toRemove = S.products.filter(p => s.has(p.id));
+  if(!toRemove.length) return;
+  toRemove.forEach(p => s.delete(p.id));
   renderCCprods();
+  try {
+    await _del('cust_products', '?cust_id=eq.'+ccId);
+    _toast('✓ All products removed', 1500);
+  } catch(e) {
+    toRemove.forEach(p => s.add(p.id));
+    renderCCprods();
+    _toast('✗ Error: '+e.message.slice(0,50), 3000);
+  }
 }
 
-function selectCatProds(catId) {
+async function selectCatProds(catId) {
   const s = getCustProds(ccId);
-  S.products.filter(p=>p.catId===catId).forEach(p => {
-    if(!s.has(p.id)) {
-      s.add(p.id);
-      _post('cust_products',[{cust_id:ccId,product_id:p.id}]).catch(()=>{});
-    }
-  });
+  const toAdd = S.products.filter(p => p.catId===catId && !s.has(p.id));
+  if(!toAdd.length) return;
+  toAdd.forEach(p => s.add(p.id));
   renderCCprods();
+  try {
+    await _post('cust_products', toAdd.map(p => ({cust_id:ccId, product_id:p.id})));
+  } catch(e) {
+    if(!e.message.includes('23505')) {
+      toAdd.forEach(p => s.delete(p.id));
+      renderCCprods();
+      _toast('✗ Error: '+e.message.slice(0,50), 3000);
+    }
+  }
 }
 
-function unselectCatProds(catId) {
+async function unselectCatProds(catId) {
   const s = getCustProds(ccId);
-  S.products.filter(p=>p.catId===catId).forEach(p => {
-    if(s.has(p.id)) {
-      s.delete(p.id);
-      _del('cust_products','?cust_id=eq.'+ccId+'&product_id=eq.'+p.id).catch(()=>{});
-    }
-  });
+  const toRemove = S.products.filter(p => p.catId===catId && s.has(p.id));
+  if(!toRemove.length) return;
+  toRemove.forEach(p => s.delete(p.id));
   renderCCprods();
+  try {
+    for(const p of toRemove) {
+      await _del('cust_products', '?cust_id=eq.'+ccId+'&product_id=eq.'+p.id);
+    }
+  } catch(e) {
+    toRemove.forEach(p => s.add(p.id));
+    renderCCprods();
+    _toast('✗ Error: '+e.message.slice(0,50), 3000);
+  }
 }
 function toggleCustProd(cid,pid,checked){const s=getCustProds(cid);if(checked)s.add(pid);else s.delete(pid);}
 function renderCChistory(){
@@ -3860,16 +3891,7 @@ async function autoAssignBags(custId, overrideType) {
     }
   }
   if(assigned.length) {
-    // Force a full save to make sure DB is in sync
-    try {
-      const s2 = getCustProds(custId);
-      await _del('cust_products', '?cust_id=eq.'+custId);
-      const rows = [...s2].map(pid => ({cust_id: custId, product_id: pid}));
-      if(rows.length) await _post('cust_products', rows);
-      _toast('✓ Bags saved: ' + assigned.join(', '), 3000);
-    } catch(e) {
-      _toast('✗ Bag save failed: '+e.message.slice(0,50), 4000);
-    }
+    _toast('✓ Bags assigned: ' + assigned.join(', '), 3000);
   }
 }
 
@@ -4014,32 +4036,35 @@ function exportHistoryCSV() {
 
 async function saveAllProds() {
   if(!ccId) return;
-  const s = getCustProds(ccId);
+  const uiSet = getCustProds(ccId); // what's shown in UI right now
   const btn = event.target;
   btn.textContent = '⏳ Saving...';
   btn.disabled = true;
   try {
-    // Delete all existing assignments for this customer
-    await _del('cust_products', '?cust_id=eq.'+ccId);
-    // Re-insert all currently selected (after delete, no duplicate risk)
-    const rows = [...s].map(pid => ({cust_id: ccId, product_id: pid}));
-    if(rows.length) {
-      // Use upsert to be safe
-      const url = _SURL + '/rest/v1/cust_products';
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {..._hdr('POST'), 'Prefer': 'resolution=merge-duplicates'},
-        body: JSON.stringify(rows)
-      });
-      if(!res.ok) { const t = await res.text(); throw new Error(t.slice(0,100)); }
+    // Step 1: Load current DB state for this customer
+    const existing = await _get('cust_products', '?cust_id=eq.'+ccId+'&select=product_id');
+    const dbSet = new Set(existing.map(r => r.product_id));
+
+    // Step 2: Find what to ADD (in UI but not in DB)
+    const toAdd = [...uiSet].filter(pid => !dbSet.has(pid));
+
+    // Step 3: Find what to REMOVE (in DB but not in UI)
+    const toRemove = [...dbSet].filter(pid => !uiSet.has(pid));
+
+    // Step 4: Apply changes
+    for(const pid of toRemove) {
+      await _del('cust_products', '?cust_id=eq.'+ccId+'&product_id=eq.'+pid);
     }
+    if(toAdd.length) {
+      await _post('cust_products', toAdd.map(pid => ({cust_id: ccId, product_id: pid})));
+    }
+
+    // Update local cache to match DB
+    custProds[ccId] = uiSet;
+
     btn.textContent = '✓ Saved!';
-    btn.style.background = '#16a34a';
-    setTimeout(() => {
-      btn.textContent = '💾 Save All';
-      btn.disabled = false;
-    }, 2000);
-    _toast('✓ Products saved — '+rows.length+' items', 2500);
+    setTimeout(() => { btn.textContent = '💾 Save All'; btn.disabled = false; }, 2000);
+    _toast(`✓ Saved — ${toAdd.length} added, ${toRemove.length} removed`, 2500);
   } catch(e) {
     btn.textContent = '✗ Error';
     btn.disabled = false;
