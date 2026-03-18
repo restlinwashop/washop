@@ -500,8 +500,12 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
     <div id="hist-period-ctrl" style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"></div>
     <div class="hist-filters">
       <div class="field"><label>Customer</label><select id="hc" onchange="renderHistory()"><option value="">All</option></select></div>
+      <div class="field"><label>Category</label><select id="hcat" onchange="renderHistCatFilter()"><option value="">All Categories</option></select></div>
       <div class="field"><label>Product</label><select id="hp" onchange="renderHistory()"><option value="">All</option></select></div>
       <div class="field"><label>Type</label><select id="htype" onchange="renderHistory()"><option value="">All</option><option value="receive">Received</option><option value="dispatch">Dispatched</option></select></div>
+      <div class="field" style="display:flex;align-items:flex-end">
+        <button class="btn btn-secondary" onclick="exportHistoryCSV()" style="margin-bottom:0">⬇ Export CSV</button>
+      </div>
     </div>
     <div class="grid-2" style="margin-bottom:18px">
       <div class="stat-card"><div class="stat-label">Total Received (period)</div><div class="stat-val" id="hs-recv" style="color:var(--accent2);font-size:28px;font-family:'DM Mono',monospace">0</div></div>
@@ -1604,8 +1608,10 @@ function checkAlarms(){
 // ═══════════════════════════════════════════════
 let histChart=null;
 function initHistory(){
-  document.getElementById('hc').innerHTML='<option value="">All</option>'+S.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('hc').innerHTML='<option value="">All</option>'+S.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   document.getElementById('hp').innerHTML='<option value="">All</option>'+S.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const hcatEl=document.getElementById('hcat');
+  if(hcatEl) hcatEl.innerHTML='<option value="">All Categories</option>'+S.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   renderHistPeriodCtrl();renderHistory();
 }
 let histPeriod='daily';
@@ -1632,15 +1638,28 @@ function renderHistPeriodCtrl(){
   else if(histPeriod==='yearly'){const y=new Date().getFullYear();ctrl.innerHTML=`<div class="field"><label>Year</label><select id="hist-yr" onchange="renderHistory()"><option>${y}</option><option>${y-1}</option><option>${y-2}</option></select></div>`;}
   else{ctrl.innerHTML=`<div class="field"><label>From</label><input type="date" id="hist-cf" value="2026-01-01" onchange="renderHistory()"></div><div class="field"><label>To</label><input type="date" id="hist-ct" value="${todayStr()}" onchange="renderHistory()"></div>`;}
 }
+function renderHistCatFilter() {
+  // Filter product dropdown by selected category
+  const catId = document.getElementById('hcat')?.value || '';
+  const hpEl = document.getElementById('hp');
+  if(!hpEl) return;
+  const filtered = catId ? S.products.filter(p=>p.catId===catId) : S.products;
+  hpEl.innerHTML = '<option value="">All Products</option>' +
+    filtered.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  renderHistory();
+}
+
 function renderHistory(){
   const{from,to}=getHistDateRange();
   const cid=document.getElementById('hc').value,pid=document.getElementById('hp').value;
   const htype=document.getElementById('htype')?.value||'';
+  const catId=document.getElementById('hcat')?.value||'';
   let entries=S.history.filter(h=>{
     if(h.date<from||h.date>to)return false;
     if(cid&&h.customerId!==cid)return false;
     if(pid&&h.productId!==pid)return false;
     if(htype&&h.type!==htype)return false;
+    if(catId){const p=S.products.find(x=>x.id===h.productId);if(!p||p.catId!==catId)return false;}
     return true;
   });
   // summary totals
@@ -3778,6 +3797,70 @@ async function deductBagsOnDelivery(order) {
 // LOAD customer type from DB
 // ═══════════════════════════════════════
 // Patch loadFromDB to include cust_type
+
+
+// ═══════════════════════════════════════
+// HISTORY EXPORT
+// ═══════════════════════════════════════
+function exportHistoryCSV() {
+  const{from,to}=getHistDateRange();
+  const cid=document.getElementById('hc').value;
+  const pid=document.getElementById('hp').value;
+  const htype=document.getElementById('htype')?.value||'';
+  const catId=document.getElementById('hcat')?.value||'';
+
+  let entries=S.history.filter(h=>{
+    if(h.date<from||h.date>to)return false;
+    if(cid&&h.customerId!==cid)return false;
+    if(pid&&h.productId!==pid)return false;
+    if(htype&&h.type!==htype)return false;
+    if(catId){const p=S.products.find(x=>x.id===h.productId);if(!p||p.catId!==catId)return false;}
+    return true;
+  }).slice().sort((a,b)=>a.date.localeCompare(b.date));
+
+  if(!entries.length) { _toast('No data to export', 2000); return; }
+
+  // Build product summary (totals per product)
+  const summary = {};
+  entries.forEach(h => {
+    const p = S.products.find(x=>x.id===h.productId);
+    const name = p?.name||h.productId;
+    const cat = S.categories.find(x=>x.id===p?.catId);
+    if(!summary[name]) summary[name] = {category:cat?.name||'?', received:0, dispatched:0};
+    if(h.type==='receive') summary[name].received += h.qty;
+    else summary[name].dispatched += h.qty;
+  });
+
+  // CSV rows
+  const rows = [
+    ['WashOps Export — ' + from + ' to ' + to],
+    [],
+    ['SUMMARY BY PRODUCT'],
+    ['Category','Product','Total Received','Total Dispatched','Net (Recv - Disp)'],
+    ...Object.entries(summary).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,d])=>[
+      d.category, name, d.received, d.dispatched, d.received - d.dispatched
+    ]),
+    [],
+    ['TRANSACTION LOG'],
+    ['Date','Customer','Category','Product','Qty','Type'],
+    ...entries.map(h=>{
+      const c=S.customers.find(x=>x.id===h.customerId);
+      const p=S.products.find(x=>x.id===h.productId);
+      const cat=S.categories.find(x=>x.id===p?.catId);
+      return[h.date, c?.name||'?', cat?.name||'?', p?.name||'?', h.qty, h.type.toUpperCase()];
+    })
+  ];
+
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'washops-history-'+from+'-to-'+to+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  _toast('✓ Exported '+entries.length+' records', 2500);
+}
 
 async function ensureDeliveryDaysColumn() {
   // Try to add the column if it doesn't exist - will fail silently if already exists
