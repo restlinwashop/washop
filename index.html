@@ -452,7 +452,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
             <label>Customer</label>
             <div class="cust-search-wrap" style="display:flex;gap:8px;align-items:flex-start">
               <div style="flex:1;position:relative">
-                <input type="text" id="recv-search" placeholder="Type customer name..." oninput="filterCusts(this.value)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                <input type="text" id="recv-search" placeholder="Type customer name..." oninput="filterCusts(this.value)" onclick="openCustModal(this.value)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 <div id="cust-dd" class="cust-dropdown" style="display:none"></div>
               </div>
               <button id="mic-btn" onclick="startVoiceSearch()" title="Voice search"
@@ -1263,35 +1263,85 @@ function closeKP(){document.getElementById('kp-modal').classList.remove('open');
 let recvCid=null,recvCatId=null,recvQtys={},recvProdsCache=[];
 
 function filterCusts(q){
-  const dd=document.getElementById('cust-dd');
-  if(!q){dd.style.display='none';return;}
-  const ql=q.toLowerCase();
-  // Sort: exact match first, starts-with second, contains last
-  const matches=S.customers.filter(c=>c.active&&c.name.toLowerCase().includes(ql));
+  // Hide old dropdown (kept in DOM but unused)
+  document.getElementById('cust-dd').style.display='none';
+  openCustModal(q);
+}
+
+function openCustModal(q){
+  const ql=(q||'').toLowerCase();
+  const matches = ql
+    ? S.customers.filter(c=>c.active&&c.name.toLowerCase().includes(ql))
+    : S.customers.filter(c=>c.active);
   matches.sort((a,b)=>{
+    if(!ql) return a.name.localeCompare(b.name);
     const an=a.name.toLowerCase(), bn=b.name.toLowerCase();
-    const aExact=an===ql, bExact=bn===ql;
-    if(aExact&&!bExact)return -1;
-    if(!aExact&&bExact)return 1;
-    const aStarts=an.startsWith(ql), bStarts=bn.startsWith(ql);
-    if(aStarts&&!bStarts)return -1;
-    if(!aStarts&&bStarts)return 1;
+    if(an===ql&&bn!==ql)return -1;
+    if(an!==ql&&bn===ql)return 1;
+    if(an.startsWith(ql)&&!bn.startsWith(ql))return -1;
+    if(!an.startsWith(ql)&&bn.startsWith(ql))return 1;
     return an.localeCompare(bn);
   });
-  if(!matches.length){dd.innerHTML='<div class="cust-dd-item"><div class="cust-dd-name" style="color:var(--muted)">No results</div></div>';dd.style.display='block';return;}
-  dd.innerHTML=matches.map(c=>`<div class="cust-dd-item" onmousedown="selectRecvCust('${c.id}')"><div class="cust-dd-name">${c.name}</div><div class="cust-dd-meta">${c.frequency} · ${c.address}</div></div>`).join('');
-  // Touch: only select if finger didn't scroll (moved less than 8px)
-  dd.querySelectorAll('.cust-dd-item').forEach((el,i)=>{
-    let startY=0;
-    el.addEventListener('touchstart',e=>{startY=e.touches[0].clientY;},{passive:true});
-    el.addEventListener('touchend',e=>{
-      if(Math.abs(e.changedTouches[0].clientY-startY)<8){
-        e.preventDefault();
-        selectRecvCust(matches[i].id);
-      }
-    });
+
+  let modal = document.getElementById('cust-pick-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'cust-pick-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center';
+    modal.innerHTML = `
+      <div style="background:#fff;width:100%;max-width:700px;border-radius:20px 20px 0 0;max-height:80vh;display:flex;flex-direction:column">
+        <div style="padding:16px 16px 8px;border-bottom:1px solid #e5e7eb;display:flex;gap:10px;align-items:center">
+          <input id="cust-modal-search" type="text" placeholder="Search customer..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            style="flex:1;padding:10px 14px;font-size:16px;border:1px solid #d1d5db;border-radius:10px;outline:none"
+            oninput="filterCustModal(this.value)">
+          <button onclick="closeCustModal()" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:10px;background:#f9fafb;font-size:15px;cursor:pointer">✕</button>
+        </div>
+        <div id="cust-modal-list" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:8px 0"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e=>{ if(e.target===modal) closeCustModal(); });
+  }
+
+  modal.style.display='flex';
+  const inp = document.getElementById('cust-modal-search');
+  inp.value = q||'';
+  setTimeout(()=>inp.focus(),100);
+  renderCustModalList(matches);
+}
+
+function renderCustModalList(matches){
+  const list = document.getElementById('cust-modal-list');
+  if(!matches.length){
+    list.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af">No customers found</div>';
+    return;
+  }
+  list.innerHTML = matches.map(c=>`
+    <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;cursor:pointer;active:background:#f0fdf4"
+      ontouchend="event.preventDefault();closeCustModal();selectRecvCust('${c.id}')"
+      onmousedown="closeCustModal();selectRecvCust('${c.id}')">
+      <div style="font-size:15px;font-weight:600;color:#111">${c.name}</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:2px">${c.frequency||''} · ${c.address||''}</div>
+    </div>`).join('');
+}
+
+function filterCustModal(q){
+  const ql=q.toLowerCase();
+  const matches = ql
+    ? S.customers.filter(c=>c.active&&c.name.toLowerCase().includes(ql))
+    : S.customers.filter(c=>c.active);
+  matches.sort((a,b)=>{
+    if(!ql) return a.name.localeCompare(b.name);
+    const an=a.name.toLowerCase(), bn=b.name.toLowerCase();
+    if(an.startsWith(ql)&&!bn.startsWith(ql))return -1;
+    if(!an.startsWith(ql)&&bn.startsWith(ql))return 1;
+    return an.localeCompare(bn);
   });
-  dd.style.display='block';
+  renderCustModalList(matches);
+}
+
+function closeCustModal(){
+  const m=document.getElementById('cust-pick-modal');
+  if(m) m.style.display='none';
 }
 async function selectRecvCust(id){
   recvCid=id;
