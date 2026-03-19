@@ -1280,7 +1280,7 @@ function renderWeekStrip(){
   for(let i=0;i<6;i++){
     const d=addDays(curWeekMon,i);
     const dt=new Date(d+'T00:00:00');
-    const hasO=S.orders.some(o=>o.deliveryDate===d);
+    const hasO=S.orders.some(o=>o.deliveryDate===d && o.status!=='delivered');
     const isSel=d===selDay,isT=d===today;
     html+=`<div class="day-pill ${isSel?'active':''} ${isT&&!isSel?'today':''}" onclick="selectDay('${d}')">
       ${hasO&&!isSel?'<div class="day-dot"></div>':''}
@@ -2429,11 +2429,35 @@ confirmDelivery = async function(id) {
 const _origSaveEO = saveEO;
 saveEO = async function() {
   const o = S.orders.find(x => x.id===eoId); if (!o) return;
+  
+  // If all items are zero qty — delete the whole order instead of saving empty
+  const totalQty = o.items.reduce((s,it) => s + (it.qty||0), 0);
+  if(totalQty === 0) {
+    if(confirm('All items are zero. Delete this order completely?')) {
+      try {
+        await _del('order_items','?order_id=eq.'+eoId);
+        await _del('orders','?id=eq.'+eoId);
+        S.orders = S.orders.filter(x => x.id!==eoId);
+        closeEO(); renderOrders(); updateOrderBadge();
+        _toast('✓ Empty order deleted', 2000);
+      } catch(e) { alert('Delete failed: '+e.message); }
+    }
+    return;
+  }
+
   try {
-    await _patch('orders',{delivery_date:document.getElementById('eo-date').value,note:document.getElementById('eo-note').value},'?id=eq.'+eoId);
-    for (const it of o.items) { if (it.id) await _patch('order_items',{qty:it.qty},'?id=eq.'+it.id); }
-  } catch(e) { console.warn('saveEO DB:', e); }
-  _origSaveEO();
+    await _patch('orders',{
+      delivery_date: document.getElementById('eo-date').value,
+      note: document.getElementById('eo-note').value
+    },'?id=eq.'+eoId);
+    for (const it of o.items) {
+      if (it.id) await _patch('order_items',{qty:it.qty},'?id=eq.'+it.id);
+    }
+    _origSaveEO();
+    _toast('✓ Order saved', 1500);
+  } catch(e) {
+    alert('Save failed: '+e.message);
+  }
 };
 
 const _origDeleteOrder = deleteOrder;
