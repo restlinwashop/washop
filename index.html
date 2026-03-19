@@ -266,9 +266,70 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
 .dash-tile-bar { height:4px;border-radius:2px;margin-top:10px;background:#e5e7eb;overflow:hidden; }
 .dash-tile-bar-fill { height:100%;border-radius:2px;transition:width .5s; }
 
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 768px) {
+  /* Hide sidebar, show hamburger */
+  #sidebar { transform: translateX(-100%); transition: transform .25s ease; }
+  #sidebar.mobile-open { transform: translateX(0); }
+  #main { margin-left: 0 !important; }
+
+  /* Topbar */
+  .topbar { padding: 0 14px; }
+  .topbar-date { display: none; }
+
+  /* Pages */
+  .page { padding: 14px; }
+
+  /* Grids collapse to 1 col */
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; gap: 10px; }
+
+  /* Product grid wraps nicely */
+  .product-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+  .product-card { padding: 12px !important; }
+
+  /* PS items full width on mobile */
+  .ps-item { min-width: 120px; }
+
+  /* Driver app full width */
+  #page-driver { padding: 14px; }
+  #driver-pin-screen { max-width: 100% !important; padding: 10px 0 !important; }
+
+  /* Tables scroll horizontally */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Flex rows wrap */
+  .flex-row { flex-wrap: wrap; }
+
+  /* Buttons full width where needed */
+  .w-full { width: 100%; }
+
+  /* Admin tabs scroll */
+  .admin-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; flex-wrap: nowrap; }
+
+  /* Cards */
+  .card-body { padding: 14px; }
+  .card-header { padding: 12px 14px; }
+
+  /* Week strip scrollable */
+  #day-strip { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap !important; }
+  .day-pill { min-width: 52px; flex-shrink: 0; }
+
+  /* Overlay for sidebar */
+  #sidebar-overlay { display: block !important; }
+}
+
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  z-index: 99;
+}
+
 </style>
 </head>
 <body>
+<div id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
 
 <!-- ═══ SIDEBAR ═══ -->
 
@@ -1294,6 +1355,8 @@ function showPage(id){
   if(id==='admin')renderAdmin();
   if(id==='pricing')renderPricing();
   if(id==='receiving'){updateProdSummary();updateDispSummary();}
+  // Close mobile sidebar on navigation
+  if(window.innerWidth<=768) closeMobileSidebar();
 }
 document.getElementById('topbar-date').textContent=fmtFull(todayStr());
 const _dashDateEl = document.getElementById('dash-date');
@@ -4891,23 +4954,45 @@ function _voiceBestMatch(alts) {
 
 
 function toggleSidebar() {
+  const isMobile = window.innerWidth <= 768;
   const sb = document.getElementById('sidebar');
   const main = document.getElementById('main');
   const btn = document.getElementById('sidebar-toggle');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  if(isMobile) {
+    // Mobile: slide in/out over content
+    const isOpen = sb.classList.contains('mobile-open');
+    if(isOpen) {
+      sb.classList.remove('mobile-open');
+      if(overlay) overlay.style.display='none';
+    } else {
+      sb.classList.add('mobile-open');
+      if(overlay) overlay.style.display='block';
+    }
+    return;
+  }
+
+  // Desktop: hide/show with margin
   const hidden = sb.style.display === 'none';
   if(hidden) {
-    // Show sidebar
     sb.style.display = '';
     if(main) main.style.marginLeft = '';
     btn.textContent = '☰';
     try { localStorage.setItem('sb-hidden','0'); } catch(e){}
   } else {
-    // Hide sidebar
     sb.style.display = 'none';
     if(main) main.style.marginLeft = '0';
     btn.textContent = '▶';
     try { localStorage.setItem('sb-hidden','1'); } catch(e){}
   }
+}
+
+function closeMobileSidebar() {
+  const sb = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  sb.classList.remove('mobile-open');
+  if(overlay) overlay.style.display='none';
 }
 (function(){
   try {
