@@ -1883,6 +1883,10 @@ function printDriverSheet(){
 function initDriverApp(){
   const sel=document.getElementById('driver-sel');
   sel.innerHTML='<option value="">Select driver...</option>'+S.drivers.map(d=>`<option value="${d.id}">${d.name} — ${d.vehicle}</option>`).join('');
+  // Remember last selected driver
+  const saved=localStorage.getItem('washops_driver');
+  if(saved&&sel.querySelector(`option[value="${saved}"]`)) sel.value=saved;
+  sel.onchange=function(){ localStorage.setItem('washops_driver',this.value); renderDriverApp(); };
   document.getElementById('driver-date').value=todayStr();
   renderDriverApp();
 }
@@ -1892,7 +1896,23 @@ function renderDriverApp(){
   const list=document.getElementById('driver-app-list');
   if(!did){list.innerHTML='<div class="empty">Select a driver above</div>';return;}
   const drv=S.drivers.find(d=>d.id===did);
-  const orders=S.orders.filter(o=>o.driverId===did&&o.deliveryDate===date).sort((a,b)=>(a.routeOrder||99)-(b.routeOrder||99));
+
+  // Match orders by driverId OR dayDrivers for the selected date
+  const dow = new Date(date+'T00:00:00').getDay();
+  const orders=S.orders.filter(o=>{
+    if(o.deliveryDate!==date) return false;
+    if(o.status==='delivered') return true; // always show delivered
+    if(o.status!=='packed'&&o.status!=='pending') return false;
+    // Check primary driverId
+    if(o.driverId===did) return true;
+    // Check dayDrivers for this delivery date
+    const c=S.customers.find(x=>x.id===o.customerId);
+    if(c&&c.dayDrivers&&c.dayDrivers.length){
+      return c.dayDrivers.some(dd=>dd.driverId===did&&dd.day===dow);
+    }
+    return false;
+  }).sort((a,b)=>(a.routeOrder||99)-(b.routeOrder||99));
+
   if(!orders.length){list.innerHTML=`<div class="empty">No deliveries for ${drv?.name} on ${fmtD(date)}.</div>`;return;}
   list.innerHTML=orders.map(o=>`
     <div class="driver-card">
@@ -1901,21 +1921,8 @@ function renderDriverApp(){
         <span class="badge ${o.status==='delivered'?'bg-green':o.status==='packed'?'bg-warn':'bg-gray'}" style="font-size:13px">${o.status.toUpperCase()}</span>
       </div>
       <div>${o.items.map(it=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px"><span>${it.productName}</span><span class="badge bg-blue" style="font-size:13px">${it.qty}</span></div>`).join('')}</div>
-      ${o.status==='packed'?`<button class="btn btn-primary w-full" style="height:50px;font-size:15px;margin-top:14px" onclick="confirmDelivery('${o.id}');renderDriverApp()">✓ Mark Delivered</button>`:''}
+      ${o.status==='packed'?`<button class="btn btn-primary w-full" style="height:50px;font-size:15px;margin-top:14px" onclick="confirmDelivery('${o.id}')">✓ Mark Delivered</button>`:''}
     </div>`).join('');
-  // Append bottom Save All bar
-  const _listEl = document.getElementById('cc-prod-list');
-  if(_listEl) {
-    const _bottom = document.createElement('div');
-    _bottom.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:14px 0 4px 0;border-top:2px solid var(--border);margin-top:12px';
-    _bottom.innerHTML = `
-      <span style="font-size:12px;color:var(--muted);flex:1">${assignedCount} of ${totalProds} selected</span>
-      <button class="btn btn-xs btn-secondary" onclick="selectAllProds()">✓ All</button>
-      <button class="btn btn-xs btn-danger" onclick="unselectAllProds()">✕ None</button>
-      <button class="btn btn-xs btn-primary" onclick="saveAllProds()" style="background:#16a34a;border-color:#16a34a;font-weight:700">💾 Save All</button>
-    `;
-    _listEl.appendChild(_bottom);
-  }
 }
 
 // ═══════════════════════════════════════════════
