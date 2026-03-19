@@ -1311,17 +1311,32 @@ function openCustModal(q){
 
 function renderCustModalList(matches){
   const list = document.getElementById('cust-modal-list');
+  list.innerHTML = '';
   if(!matches.length){
     list.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af">No customers found</div>';
     return;
   }
-  list.innerHTML = matches.map(c=>`
-    <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;cursor:pointer;active:background:#f0fdf4"
-      ontouchend="event.preventDefault();closeCustModal();selectRecvCust('${c.id}')"
-      onmousedown="closeCustModal();selectRecvCust('${c.id}')">
-      <div style="font-size:15px;font-weight:600;color:#111">${c.name}</div>
-      <div style="font-size:12px;color:#9ca3af;margin-top:2px">${c.frequency||''} · ${c.address||''}</div>
-    </div>`).join('');
+  matches.forEach(c=>{
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:14px 18px;border-bottom:1px solid #f3f4f6;cursor:pointer';
+    el.innerHTML = `<div style="font-size:15px;font-weight:600;color:#111">${c.name}</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:2px">${c.frequency||''} · ${c.address||''}</div>`;
+    // Desktop
+    el.addEventListener('mousedown', ()=>{ closeCustModal(); selectRecvCust(c.id); });
+    // Touch — only select if didn't scroll
+    let startY=0, startX=0;
+    el.addEventListener('touchstart', e=>{ startY=e.touches[0].clientY; startX=e.touches[0].clientX; }, {passive:true});
+    el.addEventListener('touchend', e=>{
+      const dy = Math.abs(e.changedTouches[0].clientY - startY);
+      const dx = Math.abs(e.changedTouches[0].clientX - startX);
+      if(dy < 10 && dx < 10){
+        e.preventDefault();
+        closeCustModal();
+        selectRecvCust(c.id);
+      }
+    });
+    list.appendChild(el);
+  });
 }
 
 function filterCustModal(q){
