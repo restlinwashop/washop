@@ -4134,75 +4134,87 @@ function startVoiceSearch() {
 
   // If already listening, stop
   if(_voiceRecog) {
-    _voiceRecog.stop();
+    _voiceRecog.abort();
     _voiceRecog = null;
-    btn.textContent = '🎤';
-    btn.style.background = 'var(--surface2)';
+    _micReset();
     return;
   }
 
   const recog = new SpeechRecognition();
   recog.lang = 'en-AU';
-  recog.interimResults = false;
+  recog.continuous = false;        // stops automatically after speech ends
+  recog.interimResults = true;     // show partial results while speaking
   recog.maxAlternatives = 5;
   _voiceRecog = recog;
 
   btn.textContent = '🔴';
   btn.style.background = '#fee2e2';
   btn.style.borderColor = '#ef4444';
-  _toast('Listening...', 99999);
+
+  // Show animated listening indicator in search box
+  const input = document.getElementById('recv-search');
+  const origPlaceholder = input.placeholder;
+  input.placeholder = '🎤 Listening...';
+  input.value = '';
+
+  let gotResult = false;
 
   recog.onresult = (event) => {
-    _voiceRecog = null;
-    btn.textContent = '🎤';
-    btn.style.background = 'var(--surface2)';
-    btn.style.borderColor = 'var(--border)';
-    document.getElementById('_toast')?.remove();
+    const results = event.results;
+    const last = results[results.length - 1];
 
-    // Get all alternatives
-    const alts = [];
-    for(let i = 0; i < event.results[0].length; i++) {
-      alts.push(event.results[0][i].transcript.toLowerCase().trim());
-    }
-    console.log('Voice alts:', alts);
+    if(last.isFinal) {
+      gotResult = true;
+      const alts = [];
+      for(let i = 0; i < last.length; i++) {
+        alts.push(last[i].transcript.toLowerCase().trim());
+      }
 
-    // Try to match against customer names
-    const best = _voiceBestMatch(alts);
-    if(best) {
-      document.getElementById('recv-search').value = best.name;
-      filterCusts(best.name);
-      // Auto-select after short delay so dropdown shows
-      setTimeout(() => selectRecvCust(best.id), 150);
-      _toast('✓ ' + best.name, 2500);
+      const best = _voiceBestMatch(alts);
+      if(best) {
+        input.value = best.name;
+        filterCusts(best.name);
+        setTimeout(() => selectRecvCust(best.id), 100);
+        _toast('✓ ' + best.name, 2000);
+      } else {
+        const heard = alts[0];
+        input.value = heard;
+        filterCusts(heard);
+        _toast('Heard: "' + heard + '" — select manually', 3000);
+      }
     } else {
-      // No match — just fill the search box with what was heard
-      const heard = alts[0];
-      document.getElementById('recv-search').value = heard;
-      filterCusts(heard);
-      _toast('Heard: "' + heard + '" — no match, adjust manually', 3500);
+      // Show interim transcript as user speaks
+      input.value = last[0].transcript;
     }
+  };
+
+  recog.onend = () => {
+    _voiceRecog = null;
+    _micReset();
+    input.placeholder = origPlaceholder;
+    if(!gotResult) input.value = '';
   };
 
   recog.onerror = (e) => {
     _voiceRecog = null;
-    btn.textContent = '🎤';
-    btn.style.background = 'var(--surface2)';
-    btn.style.borderColor = 'var(--border)';
-    document.getElementById('_toast')?.remove();
-    if(e.error !== 'aborted') _toast('Voice error: ' + e.error, 3000);
-  };
-
-  recog.onend = () => {
-    if(_voiceRecog) {
-      _voiceRecog = null;
-      btn.textContent = '🎤';
-      btn.style.background = 'var(--surface2)';
-      btn.style.borderColor = 'var(--border)';
-      document.getElementById('_toast')?.remove();
+    _micReset();
+    input.placeholder = origPlaceholder;
+    input.value = '';
+    if(e.error !== 'aborted' && e.error !== 'no-speech') {
+      _toast('Mic error: ' + e.error, 3000);
     }
   };
 
   recog.start();
+}
+
+function _micReset() {
+  const btn = document.getElementById('mic-btn');
+  if(btn) {
+    btn.textContent = '🎤';
+    btn.style.background = 'var(--surface2)';
+    btn.style.borderColor = 'var(--border)';
+  }
 }
 
 function _voiceBestMatch(alts) {
