@@ -451,26 +451,6 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       </div>
       <div class="ps-grid" id="prod-grid"><div style="font-size:12px;color:var(--muted)">No items received yet</div></div>
     </div>
-    <div class="prod-bar" style="border-top:2px solid #e5e7eb;margin-top:0">
-      <div class="prod-bar-hdr">
-        <div class="prod-bar-title">🚚 Dispatched Items</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
-          <input type="date" id="disp-filter-date" onchange="updateDispSummary()" style="padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px">
-          <button class="btn btn-sm btn-secondary" onclick="document.getElementById('disp-filter-date').value='';updateDispSummary()">Today</button>
-          <select id="disp-filter-month" onchange="updateDispSummary()" style="padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px">
-            <option value="">— Month —</option>
-            <option value="2026-01">Jan 2026</option>
-            <option value="2026-02">Feb 2026</option>
-            <option value="2026-03">Mar 2026</option>
-            <option value="2026-04">Apr 2026</option>
-            <option value="2026-05">May 2026</option>
-            <option value="2026-06">Jun 2026</option>
-          </select>
-          <button class="btn btn-sm btn-secondary" onclick="exportDispatchedCSV()">⇩ CSV</button>
-        </div>
-      </div>
-      <div class="ps-grid" id="disp-grid"><div style="font-size:12px;color:var(--muted)">No dispatched items</div></div>
-    </div>
     <div class="card">
       <div class="card-header"><div class="card-title">📦 Receive Goods</div></div>
       <div class="card-body">
@@ -556,6 +536,27 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <button class="btn btn-secondary btn-sm" onclick="printDriverSheet()" style="margin-left:auto">🖨 Print Driver Sheet</button>
     </div>
     <div id="dispatch-list"><div class="empty">No packed orders yet.</div></div>
+
+    <div class="prod-bar" style="margin-top:24px">
+      <div class="prod-bar-hdr">
+        <div class="prod-bar-title">🚚 Dispatched Items Summary</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <input type="date" id="disp-filter-date" onchange="updateDispSummary()" style="padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px">
+          <button class="btn btn-sm btn-secondary" onclick="document.getElementById('disp-filter-date').value='';document.getElementById('disp-filter-month').value='';updateDispSummary()">Clear</button>
+          <select id="disp-filter-month" onchange="updateDispSummary()" style="padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px">
+            <option value="">— Month —</option>
+            <option value="2026-01">Jan 2026</option>
+            <option value="2026-02">Feb 2026</option>
+            <option value="2026-03">Mar 2026</option>
+            <option value="2026-04">Apr 2026</option>
+            <option value="2026-05">May 2026</option>
+            <option value="2026-06">Jun 2026</option>
+          </select>
+          <button class="btn btn-sm btn-secondary" onclick="exportDispatchedCSV()">⇩ CSV</button>
+        </div>
+      </div>
+      <div class="ps-grid" id="disp-grid"><div style="font-size:12px;color:var(--muted)">Select a date or month above</div></div>
+    </div>
   </div>
 
   <!-- ════ STOCK ════ -->
@@ -1255,7 +1256,7 @@ function showPage(id){
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')===`showPage('${id}')`)n.classList.add('active');});
   document.getElementById('page-title').textContent=PAGE_TITLES[id]||id;
   if(id==='order')initOrder();
-  if(id==='dispatch')renderDispatch();
+  if(id==='dispatch'){renderDispatch();updateDispSummary();}
   if(id==='driver')initDriverApp();
   if(id==='history')initHistory();
   if(id==='stock')renderStockTable();
@@ -4214,9 +4215,9 @@ loadFromDB = async function() {
   if(activePage === 'operation') renderOperation();
   if(activePage === 'dashboard') renderDashboard();
   if(activePage === 'order') renderOrders();
-  if(activePage === 'dispatch') renderDispatch();
+  if(activePage === 'dispatch'){renderDispatch();updateDispSummary();}
   if(activePage === 'driver') renderDriverApp();
-  if(activePage === 'receiving'){updateProdSummary();updateDispSummary();}
+  if(activePage === 'receiving') updateProdSummary();
 };
 
 // Patch showPage to init operation
