@@ -131,9 +131,9 @@ tr:hover td{background:#f9fafb;}
 .modal-lg{width:580px;max-height:90vh;overflow-y:auto;}
 .modal-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:4px;color:var(--text);}
 .modal-sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
-.kp-display{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:14px;font-family:'DM Mono',monospace;font-size:38px;font-weight:500;color:var(--accent);text-align:right;margin-bottom:12px;min-height:68px;}
-.kp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.kp-btn{height:54px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:22px;font-weight:600;cursor:pointer;transition:all .1s;font-family:'DM Mono',monospace;}
+.kp-display{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:16px;font-family:monospace;font-size:48px;font-weight:600;color:var(--accent);text-align:right;margin-bottom:14px;min-height:80px;}
+.kp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.kp-btn{height:72px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:28px;font-weight:700;cursor:pointer;transition:all .1s;font-family:monospace;-webkit-tap-highlight-color:transparent;}
 .kp-btn:hover{background:var(--accent2);color:#fff;border-color:var(--accent2);}
 .kp-ok{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important;}
 .kp-del{color:var(--danger)!important;}
@@ -452,7 +452,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
             <label>Customer</label>
             <div class="cust-search-wrap" style="display:flex;gap:8px;align-items:flex-start">
               <div style="flex:1;position:relative">
-                <input type="text" id="recv-search" placeholder="Type customer name..." oninput="filterCusts(this.value)" autocomplete="off">
+                <input type="text" id="recv-search" placeholder="Type customer name..." oninput="filterCusts(this.value)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 <div id="cust-dd" class="cust-dropdown" style="display:none"></div>
               </div>
               <button id="mic-btn" onclick="startVoiceSearch()" title="Voice search"
@@ -985,7 +985,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
 
 <!-- ════ KEYPAD MODAL ════ -->
 <div class="modal-overlay" id="kp-modal">
-  <div class="modal">
+  <div class="modal" style="width:340px;max-width:95vw">
     <div class="modal-title" id="kp-title">Enter Quantity</div>
     <div class="modal-sub" id="kp-sub">Tap numbers</div>
     <div class="kp-display" id="kp-disp">0</div>
