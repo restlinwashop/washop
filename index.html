@@ -2098,7 +2098,7 @@ function showDriverScreen(driverId){
 }
 
 function driverLogout(){
-  _activeDriverId=null; _driverPin='';
+  _activeDriverId=null; _driverPin=''; _driverPinLocked=false;
   localStorage.removeItem('washops_driver');
   document.getElementById('driver-pin-screen').style.display='block';
   document.getElementById('driver-app-screen').style.display='none';
