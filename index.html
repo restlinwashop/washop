@@ -1933,65 +1933,50 @@ function renderCCdriver(){
 
 function renderCCstock(){
   const assigned = getCustProds(ccId);
-  // Only show products assigned to this customer
-  const custProds = S.products.filter(p => assigned.has(p.id));
-  if(!custProds.length) {
-    document.getElementById('cc-stock-list').innerHTML =
-      '<div style="color:var(--muted);font-size:13px;padding:8px 0">No products assigned. Go to Products tab first.</div>';
+  const myProds = S.products.filter(p => assigned.has(p.id));
+  const el = document.getElementById('cc-stock-list');
+  if(!el) return;
+
+  if(!myProds.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No products assigned. Go to Products tab first.</div>';
     return;
   }
 
-  document.getElementById('cc-stock-list').innerHTML = `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-      Stock = Opening Balance + all Received − all Dispatched (calculated from history)
-    </div>
-    <table style="width:100%;border-collapse:collapse">
-      <thead>
-        <tr style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
-          <th style="text-align:left;padding:6px 8px">Product</th>
-          <th style="text-align:center;padding:6px 8px">Opening</th>
-          <th style="text-align:center;padding:6px 8px;color:#16a34a">+ Received</th>
-          <th style="text-align:center;padding:6px 8px;color:#dc2626">− Dispatched</th>
-          <th style="text-align:center;padding:6px 8px;font-weight:700;color:var(--text)">= At Customer</th>
-          <th style="text-align:center;padding:6px 8px">Alarm</th>
-          <th style="width:30px"></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${custProds.map(p => {
-          const se = S.stockEntries.find(s => s.customerId===ccId && s.productId===p.id);
-          const ob = se?.openingBalance || 0;
-          const th = se?.threshold || 0;
-          // Calculate from history
-          const recv = S.history.filter(h => h.customerId===ccId && h.productId===p.id && h.type==='receive').reduce((a,b)=>a+b.qty,0);
-          const disp = S.history.filter(h => h.customerId===ccId && h.productId===p.id && h.type==='dispatch').reduce((a,b)=>a+b.qty,0);
-          const atCust = ob + recv - disp;
-          const low = th > 0 && atCust <= th;
-          return \`<tr style="border-bottom:1px solid var(--border);\${low?'background:#fef2f2':''}">
-            <td style="padding:10px 8px;font-weight:600;font-size:13px">\${p.name}</td>
-            <td style="text-align:center;padding:8px">
-              <input class="inp-sm" type="number" id="ccob-\${p.id}" value="\${ob}" min="0"
-                style="width:70px;text-align:center" onchange="updateCCob('\${p.id}',this.value)">
-            </td>
-            <td style="text-align:center;padding:8px;font-family:'DM Mono',monospace;color:#16a34a;font-weight:700">\${recv}</td>
-            <td style="text-align:center;padding:8px;font-family:'DM Mono',monospace;color:#dc2626;font-weight:700">\${disp}</td>
-            <td style="text-align:center;padding:8px">
-              <span style="font-family:'DM Mono',monospace;font-size:18px;font-weight:800;
-                color:\${atCust<=0?'#dc2626':low?'#d97706':'#16a34a'}">\${atCust}</span>
-            </td>
-            <td style="text-align:center;padding:8px">
-              <input class="inp-sm" type="number" id="ccth-\${p.id}" value="\${th}" min="0"
-                style="width:60px;text-align:center" placeholder="0">
-            </td>
-            <td style="text-align:center;padding:8px">
-              <div class="status-dot \${low?'dot-red':atCust>0?'dot-green':'dot-gray'}"></div>
-            </td>
-          </tr>\`;
-        }).join('')}
-      </tbody>
-    </table>`;
-}
+  let rows = '';
+  myProds.forEach(p => {
+    const se = S.stockEntries.find(s => s.customerId===ccId && s.productId===p.id);
+    const ob = se?.openingBalance || 0;
+    const th = se?.threshold || 0;
+    const recv = S.history.filter(h => h.customerId===ccId && h.productId===p.id && h.type==='receive').reduce((a,b)=>a+b.qty,0);
+    const disp = S.history.filter(h => h.customerId===ccId && h.productId===p.id && h.type==='dispatch').reduce((a,b)=>a+b.qty,0);
+    const atCust = ob + recv - disp;
+    const low = th > 0 && atCust <= th;
+    const col = atCust <= 0 ? '#dc2626' : low ? '#d97706' : '#16a34a';
+    const rowBg = low ? 'background:#fef2f2;' : '';
+    rows += '<tr style="border-bottom:1px solid var(--border);'+rowBg+'">'
+      + '<td style="padding:10px 8px;font-weight:600;font-size:13px">'+p.name+'</td>'
+      + '<td style="text-align:center;padding:8px"><input class="inp-sm" type="number" id="ccob-'+p.id+'" value="'+ob+'" min="0" style="width:70px;text-align:center"></td>'
+      + '<td style="text-align:center;padding:8px;font-family:'DM Mono',monospace;color:#16a34a;font-weight:700">'+recv+'</td>'
+      + '<td style="text-align:center;padding:8px;font-family:'DM Mono',monospace;color:#dc2626;font-weight:700">'+disp+'</td>'
+      + '<td style="text-align:center;padding:8px"><span style="font-family:'DM Mono',monospace;font-size:18px;font-weight:800;color:'+col+'">'+atCust+'</span></td>'
+      + '<td style="text-align:center;padding:8px"><input class="inp-sm" type="number" id="ccth-'+p.id+'" value="'+th+'" min="0" style="width:60px;text-align:center" placeholder="0"></td>'
+      + '<td style="text-align:center;padding:8px"><div class="status-dot '+(low?'dot-red':atCust>0?'dot-green':'dot-gray')+'"></div></td>'
+      + '</tr>';
+  });
 
+  el.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Opening Balance + Received − Dispatched = At Customer</div>'
+    + '<table style="width:100%;border-collapse:collapse">'
+    + '<thead><tr style="font-size:11px;color:var(--muted);text-transform:uppercase">'
+    + '<th style="text-align:left;padding:6px 8px">Product</th>'
+    + '<th style="text-align:center;padding:6px 8px">Opening</th>'
+    + '<th style="text-align:center;padding:6px 8px;color:#16a34a">+ Recv</th>'
+    + '<th style="text-align:center;padding:6px 8px;color:#dc2626">− Disp</th>'
+    + '<th style="text-align:center;padding:6px 8px;font-weight:700">= At Cust</th>'
+    + '<th style="text-align:center;padding:6px 8px">Alarm</th>'
+    + '<th style="width:30px"></th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody></table>';
+}
 function updateCCob(pid, val) {
   // Update opening balance in memory and re-render
   const ob = parseInt(val)||0;
