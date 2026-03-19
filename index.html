@@ -4579,7 +4579,7 @@ function renderRejectHistory() {
     byDate[h.date].push(h);
   });
 
-  // Also totals by product
+  // Totals by product
   const byProd = {};
   entries.forEach(h => {
     const p = S.products.find(x=>x.id===h.productId);
@@ -4588,30 +4588,36 @@ function renderRejectHistory() {
     byProd[name] += h.qty;
   });
 
-  el.innerHTML = `
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Totals (last ${days} days)</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${Object.entries(byProd).sort((a,b)=>b[1]-a[1]).map(([name,qty])=>`
-          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 14px;text-align:center">
-            <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:#dc2626">${qty}</div>
-            <div style="font-size:11px;color:#7f1d1d">${name}</div>
-          </div>`).join('')}
-      </div>
-    </div>
-    <table style="width:100%"><thead><tr><th>Date</th><th>Product</th><th>Qty</th></tr></thead>
-    <tbody>
-      ${Object.keys(byDate).sort().reverse().map(date =>
-        byDate[date].map((h,i) => {
-          const p = S.products.find(x=>x.id===h.productId);
-          return `<tr>
-            ${i===0?`<td rowspan="${byDate[date].length}" style="font-weight:600;vertical-align:top;padding-top:10px">${fmtD(date)}</td>`:''}
-            <td>${p?.name||'?'}</td>
-            <td><span class="badge" style="background:#fee2e2;color:#dc2626">${h.qty}</span></td>
-          </tr>`;
-        }).join('')
-      ).join('')}
-    </tbody></table>`;
+  // Build totals HTML
+  let totalsHtml = '';
+  Object.entries(byProd).sort((a,b)=>b[1]-a[1]).forEach(([name,qty]) => {
+    totalsHtml += '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 14px;text-align:center">'
+      + '<div style="font-family:monospace;font-size:20px;font-weight:700;color:#dc2626">'+qty+'</div>'
+      + '<div style="font-size:11px;color:#7f1d1d">'+name+'</div>'
+      + '</div>';
+  });
+
+  // Build table rows — NO nested template literals
+  let tableRows = '';
+  Object.keys(byDate).sort().reverse().forEach(date => {
+    byDate[date].forEach((h, i) => {
+      const p = S.products.find(x=>x.id===h.productId);
+      tableRows += '<tr>';
+      if(i === 0) {
+        tableRows += '<td rowspan="'+byDate[date].length+'" style="font-weight:600;vertical-align:top;padding-top:10px">'+fmtD(date)+'</td>';
+      }
+      tableRows += '<td>'+(p?.name||'?')+'</td>'
+        + '<td><span class="badge" style="background:#fee2e2;color:#dc2626">'+h.qty+'</span></td>'
+        + '</tr>';
+    });
+  });
+
+  el.innerHTML = '<div style="margin-bottom:16px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Totals (last '+days+' days)</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:8px">'+totalsHtml+'</div>'
+    + '</div>'
+    + '<table style="width:100%"><thead><tr><th>Date</th><th>Product</th><th>Qty</th></tr></thead>'
+    + '<tbody>'+tableRows+'</tbody></table>';
 }
 
 function exportRejectsCSV() {
