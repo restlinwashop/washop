@@ -338,6 +338,13 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
 <!-- ═══ MAIN ═══ -->
 <main id="main">
   <div class="topbar">
+    <button id="sidebar-toggle" onclick="toggleSidebar()"
+      style="background:none;border:1px solid var(--border);cursor:pointer;
+             padding:0;width:34px;height:34px;border-radius:7px;
+             font-size:16px;color:var(--text);flex-shrink:0;
+             display:flex;align-items:center;justify-content:center">
+      ☰
+    </button>
     <div class="topbar-title" id="page-title">Dashboard</div>
     <div class="topbar-date" id="topbar-date"></div>
   </div>
@@ -4276,6 +4283,19 @@ function toggleSidebar() {
       if(btn) btn.textContent = '▶';
     }
   } catch(e){}
+})();
+
+
+// Show iPad PWA install hint once
+(function(){
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  if(isIOS && !isStandalone && !localStorage.getItem('pwa-hint-shown')) {
+    setTimeout(() => {
+      _toast('💡 Tip: Tap Share → Add to Home Screen for full-screen app mode', 6000);
+      localStorage.setItem('pwa-hint-shown', '1');
+    }, 3000);
+  }
 })();
 
 async function ensureDeliveryDaysColumn() {
