@@ -2180,6 +2180,18 @@ function showDriverScreen(driverId){
   renderDriverApp();
 }
 
+async function markPickedUp(oid){
+  const o=S.orders.find(x=>x.id===oid); if(!o) return;
+  if(o._pickingUp) return;
+  o._pickingUp=true;
+  o.status='delivered'; // reuse delivered status — no items so no stock impact
+  try {
+    await _patch('orders',{status:'delivered',bags_collected:o.bagsCollected||0},'?id=eq.'+oid);
+  } catch(e){ console.warn('pickup DB:', e); }
+  addActivity(`Picked up: ${o.customerName} — ${o.bagsCollected||0} bags`);
+  renderDriverApp();
+}
+
 function toggleDriverDetail(id){
   const el=document.getElementById(id);
   if(!el) return;
@@ -2293,13 +2305,30 @@ function renderDriverApp(){
           <span style="font-size:13px;color:#9ca3af">bags picked up</span>
         </div>
       </div>
-      <!-- Mark Delivered -->
-      ${o.status==='packed'?`<div style="padding:0 18px 18px">
-        <button id="ddeliver-${o.id}"
-          style="width:100%;padding:18px;background:#16a34a;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
-          ✓ Mark Delivered
-        </button>
-      </div>`:''}
+      <!-- Mark Delivered / Mark Picked Up -->
+      ${o.status==='packed'
+        ? (o.note==='PU Only'
+          ? `<div style="padding:0 18px 18px">
+              <button id="dpickup-${o.id}"
+                style="width:100%;padding:18px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
+                📦 Mark Picked Up
+              </button>
+            </div>`
+          : `<div style="padding:0 18px 18px">
+              <button id="ddeliver-${o.id}"
+                style="width:100%;padding:18px;background:#16a34a;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
+                ✓ Mark Delivered
+              </button>
+            </div>`)
+        : (o.status==='pending' && o.note==='PU Only'
+          ? `<div style="padding:0 18px 18px">
+              <button id="dpickup-${o.id}"
+                style="width:100%;padding:18px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
+                📦 Mark Picked Up
+              </button>
+            </div>`
+          : '')
+      }
     </div>`;
   }).join('');
 
@@ -2329,6 +2358,12 @@ function renderDriverApp(){
       let t=false;
       deliverBtn.addEventListener('touchend',e=>{e.preventDefault();t=true;confirmDelivery(o.id);setTimeout(()=>t=false,300);},{passive:false});
       deliverBtn.addEventListener('click',()=>{if(!t)confirmDelivery(o.id);});
+    }
+    const pickupBtn=document.getElementById('dpickup-'+o.id);
+    if(pickupBtn){
+      let t=false;
+      pickupBtn.addEventListener('touchend',e=>{e.preventDefault();t=true;markPickedUp(o.id);setTimeout(()=>t=false,300);},{passive:false});
+      pickupBtn.addEventListener('click',()=>{if(!t)markPickedUp(o.id);});
     }
   });
 }
