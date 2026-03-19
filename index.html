@@ -1346,10 +1346,13 @@ function renderRecvProds(){
     </div>`).join('')
     : '<div style="color:var(--muted);font-size:13px">No products assigned. Open customer card → Products tab.</div>';
 
-  // Add quick-add button below the grid
+  // Add quick-add button below the grid — remove old one first to prevent duplicates
+  const oldBtn = document.getElementById('recv-quick-add-btn');
+  if(oldBtn) oldBtn.remove();
   const gridEl = document.getElementById('recv-grid');
   if(gridEl) {
     const btn = document.createElement('div');
+    btn.id = 'recv-quick-add-btn';
     btn.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)';
     btn.innerHTML = '<button class="btn btn-secondary btn-sm" onclick="openQuickAddProd()">＋ Add product (own goods / special)</button>';
     gridEl.after(btn);
