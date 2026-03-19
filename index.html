@@ -1204,11 +1204,11 @@ function selectRecvCust(id){
 function clearRecv(){recvCid=null;recvQtys={};recvCatId=null;document.getElementById('recv-search').value='';document.getElementById('cust-dd').style.display='none';document.getElementById('recv-sel-bar').style.display='none';document.getElementById('recv-panel').style.display='none';document.getElementById('recv-empty').style.display='block';}
 function renderRecvProds(){
   const assigned=getCustProds(recvCid);
-  const cats=S.categories.filter(c=>S.products.some(p=>p.catId===c.id&&assigned.has(p.id)));
-  if(!recvCatId||!cats.find(c=>c.id===recvCatId))recvCatId=cats[0]?.id;
-  document.getElementById('recv-cats').innerHTML=cats.map(c=>`<div class="cat-tab ${c.id===recvCatId?'active':''}" onclick="recvCatSel('${c.id}')">${c.name}</div>`).join('');
-  const prods=S.products.filter(p=>p.catId===recvCatId&&assigned.has(p.id));
-  document.getElementById('recv-grid').innerHTML=prods.map(p=>`
+  // Show ALL assigned products — no category tabs needed
+  const prods=S.products.filter(p=>assigned.has(p.id));
+  document.getElementById('recv-cats').innerHTML=''; // hide category tabs
+  document.getElementById('recv-grid').innerHTML=prods.length
+    ? prods.map(p=>`
     <div class="product-card">
       <div class="product-name">${p.name}</div>
       <div class="qty-row">
@@ -1216,7 +1216,8 @@ function renderRecvProds(){
         <div class="qty-display" onclick="openKP('${p.name}','Enter qty received',(v)=>{recvQtys['${p.id}']=v;renderRecvProds();},recvQtys['${p.id}']||0)">${recvQtys[p.id]||0}</div>
         <button class="qty-btn" onclick="adjRecv('${p.id}',1)">+</button>
       </div>
-    </div>`).join('')||'<div style="color:var(--muted);font-size:13px">No products. Open customer card → Products tab.</div>';
+    </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px">No products assigned. Open customer card → Products tab.</div>';
 }
 function recvCatSel(id){recvCatId=id;renderRecvProds();}
 function adjRecv(pid,d){recvQtys[pid]=Math.max(0,(recvQtys[pid]||0)+d);renderRecvProds();}
