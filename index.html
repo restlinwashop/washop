@@ -396,9 +396,15 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
         <div class="flex-row" style="margin-bottom:14px;align-items:flex-end">
           <div class="field" style="flex:1;margin-bottom:0">
             <label>Customer</label>
-            <div class="cust-search-wrap">
-              <input type="text" id="recv-search" placeholder="Type customer name..." oninput="filterCusts(this.value)" autocomplete="off">
-              <div id="cust-dd" class="cust-dropdown" style="display:none"></div>
+            <div class="cust-search-wrap" style="display:flex;gap:8px;align-items:flex-start">
+              <div style="flex:1;position:relative">
+                <input type="text" id="recv-search" placeholder="Type customer name..." oninput="filterCusts(this.value)" autocomplete="off">
+                <div id="cust-dd" class="cust-dropdown" style="display:none"></div>
+              </div>
+              <button id="mic-btn" onclick="startVoiceSearch()" title="Voice search"
+                style="height:40px;width:44px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s">
+                🎤
+              </button>
             </div>
           </div>
           <div class="field" style="min-width:180px;margin-bottom:0;margin-left:12px">
@@ -4109,6 +4115,121 @@ function clearCustFilters() {
     if(el) el.value = '';
   });
   renderAdmin();
+}
+
+
+// ═══════════════════════════════════════
+// VOICE SEARCH
+// ═══════════════════════════════════════
+let _voiceRecog = null;
+
+function startVoiceSearch() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition) {
+    _toast('Voice search not supported on this browser', 3000);
+    return;
+  }
+
+  const btn = document.getElementById('mic-btn');
+
+  // If already listening, stop
+  if(_voiceRecog) {
+    _voiceRecog.stop();
+    _voiceRecog = null;
+    btn.textContent = '🎤';
+    btn.style.background = 'var(--surface2)';
+    return;
+  }
+
+  const recog = new SpeechRecognition();
+  recog.lang = 'en-AU';
+  recog.interimResults = false;
+  recog.maxAlternatives = 5;
+  _voiceRecog = recog;
+
+  btn.textContent = '🔴';
+  btn.style.background = '#fee2e2';
+  btn.style.borderColor = '#ef4444';
+  _toast('Listening...', 99999);
+
+  recog.onresult = (event) => {
+    _voiceRecog = null;
+    btn.textContent = '🎤';
+    btn.style.background = 'var(--surface2)';
+    btn.style.borderColor = 'var(--border)';
+    document.getElementById('_toast')?.remove();
+
+    // Get all alternatives
+    const alts = [];
+    for(let i = 0; i < event.results[0].length; i++) {
+      alts.push(event.results[0][i].transcript.toLowerCase().trim());
+    }
+    console.log('Voice alts:', alts);
+
+    // Try to match against customer names
+    const best = _voiceBestMatch(alts);
+    if(best) {
+      document.getElementById('recv-search').value = best.name;
+      filterCusts(best.name);
+      // Auto-select after short delay so dropdown shows
+      setTimeout(() => selectRecvCust(best.id), 150);
+      _toast('✓ ' + best.name, 2500);
+    } else {
+      // No match — just fill the search box with what was heard
+      const heard = alts[0];
+      document.getElementById('recv-search').value = heard;
+      filterCusts(heard);
+      _toast('Heard: "' + heard + '" — no match, adjust manually', 3500);
+    }
+  };
+
+  recog.onerror = (e) => {
+    _voiceRecog = null;
+    btn.textContent = '🎤';
+    btn.style.background = 'var(--surface2)';
+    btn.style.borderColor = 'var(--border)';
+    document.getElementById('_toast')?.remove();
+    if(e.error !== 'aborted') _toast('Voice error: ' + e.error, 3000);
+  };
+
+  recog.onend = () => {
+    if(_voiceRecog) {
+      _voiceRecog = null;
+      btn.textContent = '🎤';
+      btn.style.background = 'var(--surface2)';
+      btn.style.borderColor = 'var(--border)';
+      document.getElementById('_toast')?.remove();
+    }
+  };
+
+  recog.start();
+}
+
+function _voiceBestMatch(alts) {
+  // Score each customer against all alternatives
+  const scores = S.customers
+    .filter(c => c.active)
+    .map(c => {
+      const cn = c.name.toLowerCase();
+      let best = 0;
+      for(const alt of alts) {
+        // Exact match
+        if(alt === cn) { best = 100; break; }
+        // Contains
+        if(cn.includes(alt) || alt.includes(cn)) { best = Math.max(best, 90); continue; }
+        // Word overlap
+        const wa = new Set(alt.split(/\s+/));
+        const wb = new Set(cn.split(/\s+/));
+        const inter = [...wa].filter(w => wb.has(w)).length;
+        const score = Math.round(inter / Math.max(wa.size, wb.size) * 80);
+        best = Math.max(best, score);
+      }
+      return {c, score: best};
+    })
+    .filter(x => x.score >= 50)
+    .sort((a,b) => b.score - a.score);
+
+  return scores[0]?.c || null;
 }
 
 async function ensureDeliveryDaysColumn() {
