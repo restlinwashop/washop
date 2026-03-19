@@ -4267,10 +4267,20 @@ function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   const main = document.getElementById('main');
   const btn = document.getElementById('sidebar-toggle');
-  const hidden = sb.classList.toggle('sidebar-hidden');
-  if(main) main.style.marginLeft = hidden ? '0' : '';
-  btn.textContent = hidden ? '▶' : '☰';
-  try { localStorage.setItem('sb-hidden', hidden ? '1' : '0'); } catch(e){}
+  const hidden = sb.style.display === 'none';
+  if(hidden) {
+    // Show sidebar
+    sb.style.display = '';
+    if(main) main.style.marginLeft = '';
+    btn.textContent = '☰';
+    try { localStorage.setItem('sb-hidden','0'); } catch(e){}
+  } else {
+    // Hide sidebar
+    sb.style.display = 'none';
+    if(main) main.style.marginLeft = '0';
+    btn.textContent = '▶';
+    try { localStorage.setItem('sb-hidden','1'); } catch(e){}
+  }
 }
 (function(){
   try {
@@ -4278,7 +4288,7 @@ function toggleSidebar() {
       const sb = document.getElementById('sidebar');
       const main = document.getElementById('main');
       const btn = document.getElementById('sidebar-toggle');
-      if(sb) sb.classList.add('sidebar-hidden');
+      if(sb) sb.style.display = 'none';
       if(main) main.style.marginLeft = '0';
       if(btn) btn.textContent = '▶';
     }
