@@ -1142,6 +1142,13 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
           </select>
           <div style="font-size:10px;color:var(--muted);margin-top:4px">Sets automatic laundry bag assignment</div>
         </div>
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="cc-skip-return" style="width:16px;height:16px;cursor:pointer">
+            Skip one return day (e.g. Mon→Fri instead of Mon→Wed for 3x week)
+          </label>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">When checked: next delivery = 2nd next scheduled day instead of 1st</div>
+        </div>
       </div>
       <button class="btn btn-primary" onclick="saveCCdetails()">Save Details</button>
     </div>
@@ -1293,25 +1300,20 @@ function nextDeliveryDate(cust, fromDate) {
   
   // Sort delivery days
   const sortedDays = days.slice().sort((a,b) => a-b);
-  
-  // Find the next day AFTER fromDate that matches a delivery day
-  // For weekly/fortnightly/monthly: find next matching weekday
-  // For 2x/3x week: find next matching weekday
-  
-  let bestDay = null;
-  let minDiff = 999;
-  
+
+  // Find next scheduled day(s) after fromDate
+  const candidates = [];
   for(const dd of sortedDays) {
-    // How many days until next occurrence of this weekday?
     let diff = dd - fromWd;
-    if(diff <= 0) diff += 7; // next week
-    if(diff < minDiff) {
-      minDiff = diff;
-      bestDay = dd;
-    }
+    if(diff <= 0) diff += 7;
+    candidates.push({day:dd, diff});
   }
-  
-  return addDays(fromDate, minDiff);
+  candidates.sort((a,b)=>a.diff-b.diff);
+
+  // skipReturn: skip the immediate next day, use the 2nd next scheduled day
+  const idx = cust.skipReturn ? 1 : 0;
+  const chosen = candidates[idx] || candidates[0];
+  return addDays(fromDate, chosen.diff);
 }
 
 // FIX: "not due" — check delivery date vs customer's scheduled pattern, NOT current date
@@ -2672,6 +2674,8 @@ function openCC(id){
   if(ctEl) ctEl.value = c.custType||'';
   const ovEl = document.getElementById('cc-next-override');
   if(ovEl) ovEl.value = c.nextDeliveryOverride||'';
+  const skipEl = document.getElementById('cc-skip-return');
+  if(skipEl) skipEl.checked = c.skipReturn||false;
   // Reset tabs
   document.querySelectorAll('.cc-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.cc-section').forEach(s=>s.classList.remove('active'));
@@ -3546,6 +3550,7 @@ async function loadFromDB() {
       notes:c.notes||'', accessCode:c.access_code||'', recvNote:c.recv_note||'',
       fixedOrder:c.fixed_order||false,
       fixedQtys:(()=>{ try{ const v=c.fixed_qtys; if(!v) return {}; if(typeof v==='object') return v; return JSON.parse(v); }catch(e){ return {}; } })(),
+      skipReturn:c.skip_return||false,
       active:c.active!==0, driverId:c.driver_id||null, routeOrder:c.route_order||99
     }));
     S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||'', pin:d.pin||''}));
@@ -3840,8 +3845,9 @@ saveCCdetails = async function() {
   const ccDays=[...document.querySelectorAll('.cc-day-cb:checked')].map(x=>parseInt(x.value));
   const newCustType = document.getElementById('cc-ctype')?.value || null;
   const newOverride = document.getElementById('cc-next-override')?.value || null;
-  const upd = {name:document.getElementById('cc-name').value,address:document.getElementById('cc-addr').value,frequency:document.getElementById('cc-freq').value,dueDay:ccDays[0]||4,deliveryDays:ccDays.length?ccDays:[4],email:document.getElementById('cc-email').value,phone:document.getElementById('cc-phone').value,notes:document.getElementById('cc-notes').value,accessCode:document.getElementById('cc-access-code').value||'',active:parseInt(document.getElementById('cc-active').value)===1,custType:newCustType,nextDeliveryOverride:newOverride};
-  try { await _patch('customers',{name:upd.name,address:upd.address,frequency:upd.frequency,due_day:upd.dueDay,delivery_days:JSON.stringify(upd.deliveryDays),email:upd.email,phone:upd.phone,notes:upd.notes,access_code:upd.accessCode,active:upd.active?1:0,cust_type:upd.custType||null,next_delivery_override:upd.nextDeliveryOverride||null},'?id=eq.'+ccId); } catch(e) { alert('DB error: '+e.message); return; }
+  const skipReturn = document.getElementById('cc-skip-return')?.checked||false;
+  const upd = {name:document.getElementById('cc-name').value,address:document.getElementById('cc-addr').value,frequency:document.getElementById('cc-freq').value,dueDay:ccDays[0]||4,deliveryDays:ccDays.length?ccDays:[4],email:document.getElementById('cc-email').value,phone:document.getElementById('cc-phone').value,notes:document.getElementById('cc-notes').value,accessCode:document.getElementById('cc-access-code').value||'',active:parseInt(document.getElementById('cc-active').value)===1,custType:newCustType,nextDeliveryOverride:newOverride,skipReturn};
+  try { await _patch('customers',{name:upd.name,address:upd.address,frequency:upd.frequency,due_day:upd.dueDay,delivery_days:JSON.stringify(upd.deliveryDays),email:upd.email,phone:upd.phone,notes:upd.notes,access_code:upd.accessCode,active:upd.active?1:0,cust_type:upd.custType||null,next_delivery_override:upd.nextDeliveryOverride||null,skip_return:skipReturn},'?id=eq.'+ccId); } catch(e) { alert('DB error: '+e.message); return; }
   Object.assign(c, upd);
   if(upd.nextDeliveryOverride !== undefined) c.nextDeliveryOverride = upd.nextDeliveryOverride;   if(upd.custType) { await autoAssignBags(ccId); if(document.getElementById("cc-products").classList.contains("active")) renderCCprods(); }
   renderAdmin(); _toast('✓ Saved', 2000);
