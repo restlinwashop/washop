@@ -1769,7 +1769,11 @@ function renderOrders(){
         if(oDid!==did)return false;
         // PUO orders: show in linen group only
         if(o.note==='PU Only') return type==='linen';
-        // Regular orders: check if has items of this type
+        // If customer has a custType, use that to determine group — ignore item product types
+        if(c?.custType==='linen') return type==='linen';
+        if(c?.custType==='towel') return type==='towel';
+        if(c?.custType==='both') return o.items.some(it=>prodType(it.productId)===type);
+        // No custType — fall back to item product types
         return o.items.some(it=>prodType(it.productId)===type);
       }).sort((a,b)=>(a.routeOrder||99)-(b.routeOrder||99));
       if(orders.length)groups.push({driverId:did,driverName:drv?drv.name:'Unassigned',vehicle:drv?.vehicle||'',type,orders});
@@ -1785,7 +1789,12 @@ function renderOrders(){
   html+=groups.map(g=>{
     const allPacked=g.orders.every(o=>o.status!=='pending');
     const groupTotals={};
-    g.orders.forEach(o=>o.items.filter(it=>prodType(it.productId)===g.type).forEach(it=>{groupTotals[it.productName]=(groupTotals[it.productName]||0)+it.qty;}));
+    g.orders.forEach(o=>{
+      const c=S.customers.find(x=>x.id===o.customerId);
+      const useAllItems=c?.custType==='linen'||c?.custType==='towel';
+      const items=useAllItems?o.items:o.items.filter(it=>prodType(it.productId)===g.type);
+      items.forEach(it=>{groupTotals[it.productName]=(groupTotals[it.productName]||0)+it.qty;});
+    });
     const summaryStr=Object.entries(groupTotals).map(([k,v])=>`${k}: ${v}`).join(' · ');
 
     return `<div class="driver-group">
@@ -1797,8 +1806,9 @@ function renderOrders(){
       <div class="driver-group-body ${allPacked?'driver-group-done':''}">
         ${g.orders.map((o,idx)=>{
           const isDone=o.status!=='pending';
-          const typeItems=o.items.filter(it=>prodType(it.productId)===g.type);
           const c=S.customers.find(x=>x.id===o.customerId)||{};
+          const useAllItems=c.custType==='linen'||c.custType==='towel';
+          const typeItems=useAllItems?o.items:o.items.filter(it=>prodType(it.productId)===g.type);
           return `<div class="order-row ${isDone?'done':''}">
             <div class="order-row-hdr" onclick="toggleOrderExpand('${o.id}-${g.type}')">
               <span class="order-row-num">${o.routeOrder||idx+1}</span>
