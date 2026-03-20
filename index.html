@@ -2184,12 +2184,16 @@ async function markPickedUp(oid){
   const o=S.orders.find(x=>x.id===oid); if(!o) return;
   if(o._pickingUp) return;
   o._pickingUp=true;
-  o.status='delivered'; // reuse delivered status — no items so no stock impact
+  // Flash green
+  const card=document.getElementById('dcard-'+oid);
+  if(card){ card.style.background='#dcfce7'; card.style.borderColor='#4ade80'; }
+  o.status='delivered';
   try {
     await _patch('orders',{status:'delivered',bags_collected:o.bagsCollected||0},'?id=eq.'+oid);
   } catch(e){ console.warn('pickup DB:', e); }
   addActivity(`Picked up: ${o.customerName} — ${o.bagsCollected||0} bags`);
-  renderDriverApp();
+  // Re-render after short delay so driver sees green flash
+  setTimeout(()=>renderDriverApp(), 800);
 }
 
 function toggleDriverDetail(id){
@@ -2250,49 +2254,55 @@ function renderDriverApp(){
   });
 
   if(!orders.length){list.innerHTML=`<div style="text-align:center;padding:40px;color:#9ca3af;font-size:15px">No deliveries for ${drv?.name}<br>on ${fmtD(date)}</div>`;return;}
-  list.innerHTML=orders.map(o=>{
+
+  const pending=orders.filter(o=>o.status!=='delivered');
+  const delivered=orders.filter(o=>o.status==='delivered');
+
+  function buildCard(o){
     const c=S.customers.find(x=>x.id===o.customerId);
     const addr=c?.address||'';
     const phone=c?.phone||'';
     const notes=c?.notes||'';
     const accessCode=c?.accessCode||'';
     const detailId='ddetail-'+o.id;
+    const isDone=o.status==='delivered';
     return`
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:14px;overflow:hidden">
+    <div id="dcard-${o.id}" style="background:${isDone?'#f0fdf4':'#fff'};border:2px solid ${isDone?'#86efac':'#e5e7eb'};border-radius:14px;margin-bottom:14px;overflow:hidden;transition:all .4s">
       <!-- Header -->
       <div style="padding:16px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
         <div style="flex:1">
-          <div style="font-weight:800;font-size:19px;line-height:1.2">${o.customerName}</div>
+          <div style="font-weight:800;font-size:19px;line-height:1.2;${isDone?'color:#15803d':''}">${isDone?'✓ ':''}<span>${o.customerName}</span></div>
           ${addr?`<div style="font-size:13px;color:#6b7280;margin-top:4px">📍 ${addr}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
           <span style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;
-            background:${o.status==='delivered'?'#dcfce7':o.status==='packed'?'#fef9c3':'#f3f4f6'};
-            color:${o.status==='delivered'?'#16a34a':o.status==='packed'?'#854d0e':'#6b7280'}">
-            ${o.status.toUpperCase()}
+            background:${isDone?'#dcfce7':o.status==='packed'?'#fef9c3':'#f3f4f6'};
+            color:${isDone?'#16a34a':o.status==='packed'?'#854d0e':'#6b7280'}">
+            ${isDone?'DONE':o.status.toUpperCase()}
           </span>
-          <button id="ddetail-btn-${o.id}"
+          ${!isDone?`<button id="ddetail-btn-${o.id}"
             style="font-size:12px;padding:4px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;cursor:pointer;color:#6b7280;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
             ℹ Details
-          </button>
+          </button>`:''}
         </div>
       </div>
       <!-- Collapsible Detail -->
-      <div id="${detailId}" style="display:none;margin:0 18px 12px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:13px">
+      ${!isDone?`<div id="${detailId}" style="display:none;margin:0 18px 12px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:13px">
         ${addr?`<div style="margin-bottom:6px"><span style="color:#9ca3af;font-weight:600">ADDRESS</span><br>${addr}</div>`:''}
         ${phone?`<div style="margin-bottom:6px"><span style="color:#9ca3af;font-weight:600">PHONE</span><br><a href="tel:${phone}" style="color:#0284c7">${phone}</a></div>`:''}
         ${accessCode?`<div style="margin-bottom:6px;padding:8px 10px;background:#fefce8;border:1px solid #fde68a;border-radius:6px"><span style="color:#9ca3af;font-weight:600">🔑 ACCESS CODE</span><br><strong style="font-size:16px;color:#92400e">${accessCode}</strong></div>`:''}
         ${notes?`<div><span style="color:#9ca3af;font-weight:600">NOTES</span><br>${notes}</div>`:''}
         ${!addr&&!phone&&!accessCode&&!notes?'<div style="color:#9ca3af">No details on file</div>':''}
-      </div>
+      </div>`:''}
       <!-- Items -->
-      <div style="padding:0 18px 14px;border-top:1px solid #f3f4f6">
+      <div style="padding:0 18px 14px;border-top:1px solid ${isDone?'#bbf7d0':'#f3f4f6'}">
         ${o.note==='PU Only'
           ? `<div style="padding:12px 0;text-align:center;font-weight:700;color:#1d4ed8;font-size:15px">📦 PU ONLY — Pickup only, no delivery</div>`
           : `<div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;padding:10px 0 6px">Items · 📦 ${o.bagCount} bag${o.bagCount>1?'s':''}</div>
              ${o.items.map(it=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f9fafb;font-size:15px"><span>${it.productName}</span><span style="font-weight:700">${it.qty}</span></div>`).join('')}`
         }
       </div>
+      ${!isDone?`
       <!-- Bag pickup -->
       <div style="padding:14px 18px;background:#f9fafb;border-top:1px solid #f3f4f6">
         <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📦 Bags Collected from Customer</div>
@@ -2305,32 +2315,32 @@ function renderDriverApp(){
           <span style="font-size:13px;color:#9ca3af">bags picked up</span>
         </div>
       </div>
-      <!-- Mark Delivered / Mark Picked Up -->
-      ${o.status==='packed'
-        ? (o.note==='PU Only'
-          ? `<div style="padding:0 18px 18px">
-              <button id="dpickup-${o.id}"
-                style="width:100%;padding:18px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
-                📦 Mark Picked Up
-              </button>
-            </div>`
-          : `<div style="padding:0 18px 18px">
-              <button id="ddeliver-${o.id}"
-                style="width:100%;padding:18px;background:#16a34a;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
-                ✓ Mark Delivered
-              </button>
-            </div>`)
-        : (o.status==='pending' && o.note==='PU Only'
-          ? `<div style="padding:0 18px 18px">
-              <button id="dpickup-${o.id}"
-                style="width:100%;padding:18px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">
-                📦 Mark Picked Up
-              </button>
-            </div>`
-          : '')
-      }
+      <!-- Action button -->
+      <div style="padding:0 18px 18px">
+        ${o.note==='PU Only'
+          ? `<button id="dpickup-${o.id}" style="width:100%;padding:18px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">📦 Mark Picked Up</button>`
+          : `<button id="ddeliver-${o.id}" style="width:100%;padding:18px;background:#16a34a;color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation">✓ Mark Delivered</button>`
+        }
+      </div>`:''}
     </div>`;
-  }).join('');
+  }
+
+  // Two sections
+  let html='';
+  if(pending.length){
+    html+=`<div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">
+      🚚 To Deliver — ${pending.length} remaining
+    </div>`;
+    html+=pending.map(buildCard).join('');
+  }
+  if(delivered.length){
+    html+=`<div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;padding-top:16px;border-top:2px solid #bbf7d0">
+      ✓ Completed — ${delivered.length} done
+    </div>`;
+    html+=delivered.map(buildCard).join('');
+  }
+  list.innerHTML=html;
+
 
   // Attach touch events — prevents double-fire from touchend+click
   orders.forEach(o=>{
@@ -3231,15 +3241,16 @@ markPacked = async function(id) {
 const _origConfirmDelivery = confirmDelivery;
 confirmDelivery = async function(id) {
   const o = S.orders.find(x => x.id===id); if (!o) return;
-  // Prevent double-tap
   if(o._delivering) return;
   o._delivering = true;
+  // Flash green immediately
+  const card=document.getElementById('dcard-'+id);
+  if(card){ card.style.background='#dcfce7'; card.style.borderColor='#4ade80'; }
   try {
     await _patch('orders',{status:'delivered'},'?id=eq.'+id);
     await _post('history', o.items.map(it => ({id:uid(),date:todayStr(),customer_id:o.customerId,product_id:it.productId,qty:it.qty,type:'dispatch'})));
     await deductBagsOnDelivery(o).catch(()=>{});
   } catch(e) { console.warn('delivery DB:', e); o._delivering=false; return; }
-  // Update local state directly — don't call _origConfirmDelivery to avoid double activity
   o.status='delivered';
   o.items.forEach(it=>{
     const se=S.stockEntries.find(s=>s.customerId===o.customerId&&s.productId===it.productId);
@@ -3247,8 +3258,8 @@ confirmDelivery = async function(id) {
   });
   addActivity(`Delivered: ${o.customerName}`);
   renderDispatch();
-  renderDriverApp();
-  checkAlarms();
+  // Re-render after delay so driver sees green flash before card moves
+  setTimeout(()=>{ renderDriverApp(); checkAlarms(); }, 800);
 };
 
 const _origSaveEO = saveEO;
