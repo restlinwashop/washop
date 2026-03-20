@@ -1097,6 +1097,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
     <div class="cust-card-tabs">
       <div class="cc-tab active" onclick="showCCtab('details',this)">Details</div>
       <div class="cc-tab" onclick="showCCtab('driver',this)">Driver & Order</div>
+      <div class="cc-tab" onclick="showCCtab('fixed',this)">Fixed Order</div>
       <div class="cc-tab" onclick="showCCtab('stock',this)">Stock</div>
       <div class="cc-tab" onclick="showCCtab('products',this)">Products</div>
       <div class="cc-tab" onclick="showCCtab('history',this)">History</div>
@@ -1153,6 +1154,24 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <hr style="margin:14px 0">
       <button class="btn btn-primary" onclick="saveCCdriver()">Save Driver Assignment</button>
     </div>
+
+    <!-- FIXED ORDER TAB -->
+    <div class="cc-section" id="cc-fixed">
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#15803d">
+        💡 Fixed orders are auto-created each due date without receiving. Quantities are counted as stock in <strong>and</strong> out automatically.
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:12px 14px;background:#fff;border:1px solid var(--border);border-radius:8px">
+        <input type="checkbox" id="cc-fixed-enabled" style="width:18px;height:18px;cursor:pointer;accent-color:#16a34a" onchange="toggleFixedOrder(this.checked)">
+        <label for="cc-fixed-enabled" style="margin:0;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;cursor:pointer">Enable Fixed Order for this customer</label>
+      </div>
+      <div id="cc-fixed-products" style="display:none">
+        <div class="section-title" style="margin-bottom:10px">Fixed Quantities per Product</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Set the quantity sent each delivery. Leave 0 to exclude.</div>
+        <div id="cc-fixed-list"></div>
+        <button class="btn btn-primary mt" onclick="saveCCfixed()">Save Fixed Order</button>
+      </div>
+    </div>
+
     <div class="cc-section" id="cc-stock">
       <div class="section-title">Opening Balances, Current Stock & Alarm Thresholds</div>
       <div id="cc-stock-list"></div>
@@ -1708,9 +1727,70 @@ function exportDispatchedCSV(){
 // ═══════════════════════════════════════════════
 let curWeekMon=getMonday(todayStr()),selDay=todayStr();
 
-function initOrder(){curWeekMon=getMonday(todayStr());selDay=todayStr();renderWeekStrip();renderOrders();}
+function initOrder(){
+  curWeekMon=getMonday(todayStr());
+  selDay=todayStr();
+  autoCreateFixedOrders();
+  renderWeekStrip();
+  renderOrders();
+}
 function shiftWeek(d){curWeekMon=addDays(curWeekMon,d*7);renderWeekStrip();renderOrders();}
 function selectDay(d){selDay=d;renderWeekStrip();renderOrders();}
+
+async function autoCreateFixedOrders(){
+  const fixedCusts=S.customers.filter(c=>c.fixedOrder&&c.active);
+  if(!fixedCusts.length) return;
+
+  // Check the next 14 days for any due dates
+  const today=todayStr();
+  for(const c of fixedCusts){
+    const qtys=c.fixedQtys||{};
+    const items=Object.entries(qtys)
+      .filter(([pid,qty])=>qty>0)
+      .map(([pid,qty])=>{
+        const p=S.products.find(x=>x.id===pid);
+        return p?{productId:pid,productName:p.name,catId:p.catId,qty:parseInt(qty)}:null;
+      }).filter(Boolean);
+    if(!items.length) continue;
+
+    // Find due dates in next 14 days that don't already have an order
+    for(let i=0;i<14;i++){
+      const date=addDays(today,i);
+      const dow=new Date(date+'T00:00:00').getDay();
+      if(dow===0) continue; // skip Sunday
+      if(!isCustomerDueOnDate(c,date)) continue;
+      // Check if order already exists for this date
+      const exists=S.orders.some(o=>o.customerId===c.id&&o.deliveryDate===date&&o.status!=='delivered');
+      if(exists) continue;
+
+      // Create fixed order locally
+      const oid=uid();
+      const _od=getOrderDriver(c.id,date);
+      const order={id:oid,customerId:c.id,customerName:c.name,
+        driverId:_od.driverId,routeOrder:_od.routeOrder||99,
+        items,deliveryDate:date,bagCount:1,status:'pending',
+        note:'Fixed',isManual:false,checkedItems:{},isFixed:true};
+      S.orders.push(order);
+
+      // Save to DB
+      try {
+        await _post('orders',[{id:oid,customer_id:c.id,customer_name:c.name,
+          driver_id:_od.driverId,route_order:_od.routeOrder||99,
+          delivery_date:date,bag_count:1,status:'pending',
+          note:'Fixed',is_manual:false,checked_items:{}}]);
+        await _post('order_items',items.map(it=>({
+          id:uid(),order_id:oid,product_id:it.productId,
+          product_name:it.productName,cat_id:it.catId,qty:it.qty
+        })));
+        // Stock in: fixed qty received
+        await _post('history',items.map(it=>({
+          id:uid(),date:date,customer_id:c.id,
+          product_id:it.productId,qty:it.qty,type:'receive'
+        })));
+      } catch(e){ console.warn('Fixed order create error:',e.message); }
+    }
+  }
+}
 
 function renderWeekStrip(){
   const today=todayStr();let html='';
@@ -1819,8 +1899,15 @@ function renderOrders(){
               <span class="order-row-cust">${o.customerName}</span>
               <span class="order-row-meta">${c.frequency||''}</span>
               <span class="badge ${o.status==='pending'?'bg-warn':o.status==='packed'?'bg-green':'bg-gray'}" style="margin-left:10px">${o.status.toUpperCase()}</span>
-              ${o.note?`<span style="font-size:11px;font-weight:700;${o.note==='PU Only'?'background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:10px;':'color:var(--muted);'}margin-left:8px">${o.note==='PU Only'?'📦 PU ONLY':'📝 '+o.note}</span>`:''}
+              ${o.note==='Fixed'?`<span style="font-size:11px;font-weight:700;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;margin-left:8px">📋 FIXED</span>`:''}
+              ${o.note&&o.note!=='Fixed'?`<span style="font-size:11px;font-weight:700;${o.note==='PU Only'?'background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:10px;':'color:var(--muted);'}margin-left:8px">${o.note==='PU Only'?'📦 PU ONLY':'📝 '+o.note}</span>`:''}
               ${c.recvNote?`<span style="font-size:11px;margin-left:8px;padding:3px 10px;background:#fef08a;color:#713f12;border-radius:10px;font-weight:700;border:1px solid #fde047">⚠ ${c.recvNote}</span>`:''}
+              ${(()=>{
+                if(o.status!=='pending') return '';
+                const assigned=getCustProds(o.customerId);
+                const missing=S.products.filter(p=>assigned.has(p.id)&&!o.items.some(it=>it.productId===p.id));
+                return missing.length?`<span style="font-size:11px;font-weight:700;background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;margin-left:8px;border:1px solid #fca5a5">⚠ Missing: ${missing.map(p=>p.name).join(', ')}</span>`:'';
+              })()}
               <span style="margin-left:10px;font-size:12px;color:var(--muted)">▾</span>
             </div>
             <div class="order-row-items" id="oe-${o.id}-${g.type}">
@@ -2585,6 +2672,7 @@ function showCCtab(id,el){
   document.querySelectorAll('.cc-section').forEach(s=>s.classList.remove('active'));
   el.classList.add('active');document.getElementById('cc-'+id).classList.add('active');
   if(id==='driver') { renderCCdriver(); renderCCdayDrivers(); }
+  if(id==='fixed') renderCCfixed();
   if(id==='stock') renderCCstock();
   if(id==='products') {
     // Always reload from DB before showing — guarantees fresh data
@@ -2616,6 +2704,71 @@ function renderCCdriver(){
     try { c.dayDrivers = JSON.parse(c.day_drivers_raw); } catch(e){}
   }
   renderCCdayDrivers();
+}
+
+function renderCCfixed(){
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  const enabledEl=document.getElementById('cc-fixed-enabled');
+  const prodsSection=document.getElementById('cc-fixed-products');
+  if(enabledEl) enabledEl.checked=c.fixedOrder||false;
+  if(prodsSection) prodsSection.style.display=(c.fixedOrder)?'block':'none';
+  renderCCfixedList();
+}
+
+function toggleFixedOrder(checked){
+  const prodsSection=document.getElementById('cc-fixed-products');
+  if(prodsSection) prodsSection.style.display=checked?'block':'none';
+  renderCCfixedList();
+}
+
+function renderCCfixedList(){
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  const el=document.getElementById('cc-fixed-list'); if(!el) return;
+  const assigned=getCustProds(ccId);
+  const prods=S.products.filter(p=>assigned.has(p.id));
+  if(!prods.length){el.innerHTML='<div style="color:var(--muted);font-size:13px">No products assigned. Set in Products tab first.</div>';return;}
+  const fixedQtys=c.fixedQtys||{};
+  el.innerHTML=prods.map(p=>{
+    const cat=S.categories.find(x=>x.id===p.catId);
+    const qty=fixedQtys[p.id]||0;
+    return`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${p.name}</div>
+        <span class="badge ${cat?.type==='towel'?'bg-blue':'bg-green'}" style="font-size:9px">${cat?.type||'?'}</span>
+      </div>
+      <button class="qty-btn" onclick="adjFixedQty('${p.id}',-1)">−</button>
+      <div class="qty-display" id="fxq-${p.id}" style="font-size:18px;cursor:pointer;min-width:52px"
+        onclick="openKP('${p.name} Fixed Qty','Enter fixed quantity',(v)=>{setFixedQty('${p.id}',v);},${qty})">${qty}</div>
+      <button class="qty-btn" onclick="adjFixedQty('${p.id}',1)">+</button>
+    </div>`;
+  }).join('');
+}
+
+function adjFixedQty(pid,d){
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  if(!c.fixedQtys) c.fixedQtys={};
+  c.fixedQtys[pid]=Math.max(0,(c.fixedQtys[pid]||0)+d);
+  const el=document.getElementById('fxq-'+pid);
+  if(el) el.textContent=c.fixedQtys[pid];
+}
+
+function setFixedQty(pid,v){
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  if(!c.fixedQtys) c.fixedQtys={};
+  c.fixedQtys[pid]=Math.max(0,v);
+  const el=document.getElementById('fxq-'+pid);
+  if(el) el.textContent=c.fixedQtys[pid];
+}
+
+async function saveCCfixed(){
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  const enabled=document.getElementById('cc-fixed-enabled')?.checked||false;
+  c.fixedOrder=enabled;
+  if(!c.fixedQtys) c.fixedQtys={};
+  try {
+    await _patch('customers',{fixed_order:enabled, fixed_qtys:JSON.stringify(c.fixedQtys)},'?id=eq.'+ccId);
+    _toast('✓ Fixed order saved',2000);
+  } catch(e){ _toast('⚠ Save error: '+e.message.slice(0,50),3000); }
 }
 
 function renderCCstock(){
@@ -3377,7 +3530,9 @@ async function loadFromDB() {
       deliveryDays: c.delivery_days ? JSON.parse(c.delivery_days) : [c.due_day||4],
       dayDrivers: c.day_drivers ? (() => { try { return JSON.parse(c.day_drivers); } catch(e) { return null; } })() : null,
       email:c.email||'', phone:c.phone||'',
-      notes:c.notes||'', accessCode:c.access_code||'', recvNote:c.recv_note||'', active:c.active!==0, driverId:c.driver_id||null, routeOrder:c.route_order||99
+      notes:c.notes||'', accessCode:c.access_code||'', recvNote:c.recv_note||'',
+      fixedOrder:c.fixed_order||false, fixedQtys:c.fixed_qtys?JSON.parse(c.fixed_qtys):{},
+      active:c.active!==0, driverId:c.driver_id||null, routeOrder:c.route_order||99
     }));
     S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||'', pin:d.pin||''}));
     S.categories  = cats.map(c => ({id:c.id, name:c.name, type:c.type||'linen'}));
