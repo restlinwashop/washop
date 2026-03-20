@@ -124,7 +124,7 @@ tr:hover td{background:#f9fafb;}
 .qty-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
 
 /* ── KEYPAD ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;touch-action:none;overscroll-behavior:contain;}
 #kp-modal{z-index:1200!important;}
 .modal-overlay.open{display:flex;}
 .modal{background:#fff;border:1px solid var(--border);border-radius:16px;padding:24px;width:310px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
@@ -133,7 +133,7 @@ tr:hover td{background:#f9fafb;}
 .modal-sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
 .kp-display{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:16px;font-family:monospace;font-size:48px;font-weight:600;color:var(--accent);text-align:right;margin-bottom:14px;min-height:80px;}
 .kp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.kp-btn{height:72px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:28px;font-weight:700;cursor:pointer;transition:all .1s;font-family:monospace;-webkit-tap-highlight-color:transparent;}
+.kp-btn{height:72px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:28px;font-weight:700;cursor:pointer;transition:all .1s;font-family:monospace;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .kp-btn:hover{background:var(--accent2);color:#fff;border-color:var(--accent2);}
 .kp-ok{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important;}
 .kp-del{color:var(--danger)!important;}
@@ -1349,11 +1349,19 @@ function openKP(title,sub,cb,init,isPrice){
   document.getElementById('kp-sub').textContent=isPrice?'Enter in cents — e.g. 250 = $2.50':sub;
   document.getElementById('kp-disp').textContent=kpVal||'0';
   document.getElementById('kp-modal').classList.add('open');
+  // Lock background scroll
+  document.body.style.overflow='hidden';
+  document.body.style.touchAction='none';
 }
 function kp(n){kpVal=(kpVal===''||kpVal==='0')?n:kpVal+n;if(parseInt(kpVal)>9999999)kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
 function kpDel(){kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
 function kpOK(){if(kpCb){const v=kpIsPrice?parseInt(kpVal||'0'):parseInt(kpVal)||0;kpCb(v);}closeKP();}
-function closeKP(){document.getElementById('kp-modal').classList.remove('open');kpCb=null;}
+function closeKP(){
+  document.getElementById('kp-modal').classList.remove('open');
+  document.body.style.overflow='';
+  document.body.style.touchAction='';
+  kpCb=null;
+}
 
 // ═══════════════════════════════════════════════
 // RECEIVING
