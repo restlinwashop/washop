@@ -1906,13 +1906,26 @@ function renderOrders(){
                 if(o.status!=='pending') return '';
                 const assigned=getCustProds(o.customerId);
                 const missing=S.products.filter(p=>assigned.has(p.id)&&!o.items.some(it=>it.productId===p.id));
-                return missing.length?`<span style="font-size:11px;font-weight:700;background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;margin-left:8px;border:1px solid #fca5a5">⚠ Missing: ${missing.map(p=>p.name).join(', ')}</span>`:'';
+                return missing.length?`<span style="font-size:11px;font-weight:700;background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;margin-left:8px;border:1px solid #fca5a5">⚠ ${missing.length} missing</span>`:'';
               })()}
               <span style="margin-left:10px;font-size:12px;color:var(--muted)">▾</span>
             </div>
             <div class="order-row-items" id="oe-${o.id}-${g.type}">
               ${c.recvNote?`<div style="margin-bottom:8px;padding:8px 12px;background:#fef9c3;border-left:4px solid #eab308;border-radius:4px;font-size:12px;font-weight:600;color:#713f12">⚠ COG/Special: ${c.recvNote}</div>`:''}
               ${typeItems.map(it=>{if(!o.checkedItems)o.checkedItems={};const ck=o.checkedItems[it.productId+g.type];return`<div style="margin-bottom:6px"><div class="item-chip ${ck?'checked':''}" onclick="toggleChip('${o.id}','${it.productId}','${g.type}',this)"><span class="item-chip-qty">${it.qty}</span><span>${it.productName}</span>${ck?'<span>✓</span>':''}</div></div>`;}).join('')}
+              ${(()=>{
+                if(o.status!=='pending') return '';
+                const assigned=getCustProds(o.customerId);
+                const missing=S.products.filter(p=>assigned.has(p.id)&&!o.items.some(it=>it.productId===p.id));
+                return missing.map(p=>`<div style="margin-bottom:6px">
+                  <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#fee2e2;border:2px solid #fca5a5;border-radius:8px;cursor:pointer;color:#dc2626;font-weight:600;font-size:13px"
+                    onclick="openEO('${o.id}')">
+                    <span style="background:#dc2626;color:#fff;border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">0</span>
+                    <span>${p.name}</span>
+                    <span style="font-size:11px;opacity:.7">tap to add →</span>
+                  </div>
+                </div>`).join('');
+              })()}
             </div>
             <div class="order-row-actions">
               ${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markPacked('${o.id}')">✓ Mark Packed</button>`:''}
