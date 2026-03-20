@@ -5630,7 +5630,8 @@ ensureDeliveryDaysColumn();
           { event: '*', schema: 'public', table: 'orders' },
           { event: '*', schema: 'public', table: 'receiving_log' },
           { event: '*', schema: 'public', table: 'receiving_log_items' },
-          { event: '*', schema: 'public', table: 'op_transfers' }
+          { event: '*', schema: 'public', table: 'op_transfers' },
+          { event: '*', schema: 'public', table: 'cust_products' }
         ]}},
         ref: '1'
       }));
@@ -5647,7 +5648,23 @@ ensureDeliveryDaysColumn();
         if(msg.event !== 'postgres_changes') return;
         const table = msg.payload?.data?.table;
         if(!table) return;
-        // Reload affected data and refresh active page
+        if(table === 'cust_products') {
+          // For cust_products: reload just that customer's products
+          const rec = msg.payload?.data?.record || msg.payload?.data?.old_record;
+          const cid = rec?.cust_id;
+          if(cid && typeof cid === 'string' && cid.length > 0) {
+            _get('cust_products','?cust_id=eq.'+cid+'&select=product_id').then(rows=>{
+              custProds[cid] = new Set(rows.map(r=>r.product_id));
+              const pricingActive = document.getElementById('page-pricing')?.classList.contains('active');
+              if(pricingActive) renderPricing();
+            }).catch(()=>{});
+          } else {
+            // Can't determine customer — do full reload
+            loadFromDB();
+          }
+          return;
+        }
+        // For all other tables: full reload
         loadFromDB();
       } catch(e) {}
     };
