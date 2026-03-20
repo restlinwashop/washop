@@ -2766,7 +2766,7 @@ async function saveCCfixed(){
   c.fixedOrder=enabled;
   if(!c.fixedQtys) c.fixedQtys={};
   try {
-    await _patch('customers',{fixed_order:enabled, fixed_qtys:JSON.stringify(c.fixedQtys)},'?id=eq.'+ccId);
+    await _patch('customers',{fixed_order:enabled, fixed_qtys:c.fixedQtys},'?id=eq.'+ccId);
     _toast('✓ Fixed order saved',2000);
   } catch(e){ _toast('⚠ Save error: '+e.message.slice(0,50),3000); }
 }
@@ -3531,7 +3531,8 @@ async function loadFromDB() {
       dayDrivers: c.day_drivers ? (() => { try { return JSON.parse(c.day_drivers); } catch(e) { return null; } })() : null,
       email:c.email||'', phone:c.phone||'',
       notes:c.notes||'', accessCode:c.access_code||'', recvNote:c.recv_note||'',
-      fixedOrder:c.fixed_order||false, fixedQtys:c.fixed_qtys?JSON.parse(c.fixed_qtys):{},
+      fixedOrder:c.fixed_order||false,
+      fixedQtys:(()=>{ try{ const v=c.fixed_qtys; if(!v) return {}; if(typeof v==='object') return v; return JSON.parse(v); }catch(e){ return {}; } })(),
       active:c.active!==0, driverId:c.driver_id||null, routeOrder:c.route_order||99
     }));
     S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||'', pin:d.pin||''}));
