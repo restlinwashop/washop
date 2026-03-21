@@ -2196,15 +2196,18 @@ async function removeEOitem(pid){
 async function addEOitem(pid,pname,catId){
   const o=S.orders.find(x=>x.id===eoId); if(!o) return;
   if(o.items.some(x=>x.productId===pid)) return;
-  openKP(pname,'Enter quantity',(v)=>{
+  openKP(pname,'Enter quantity', async (v)=>{
     if(v<=0){ openEO(eoId); return; }
-    const newItem={productId:pid,productName:pname,catId:catId||'',qty:v};
-    o.items.push(newItem);
-    // Save to DB immediately
-    _post('order_items',[{id:uid(),order_id:eoId,product_id:pid,product_name:pname,cat_id:catId||'',qty:v}])
-      .then(()=>_toast('✓ Added',1500))
-      .catch(e=>_toast('⚠ '+e.message.slice(0,50),3000));
-    openEO(eoId);
+    try {
+      // Write to DB first, wait for it
+      await _post('order_items',[{id:uid(),order_id:eoId,product_id:pid,product_name:pname,cat_id:catId||'',qty:v}]);
+      // Add to local state
+      o.items.push({productId:pid,productName:pname,catId:catId||'',qty:v});
+      _toast('✓ Added — tap Save Changes to confirm',2500);
+      openEO(eoId);
+    } catch(e){
+      _toast('⚠ Failed: '+e.message.slice(0,50),3000);
+    }
   },0);
 }
 function saveEO(){
@@ -5978,6 +5981,7 @@ ensureDeliveryDaysColumn();
         event: 'phx_join',
         payload: { config: { broadcast: { self: false }, presence: { key: '' }, postgres_changes: [
           { event: '*', schema: 'public', table: 'orders' },
+          { event: '*', schema: 'public', table: 'order_items' },
           { event: '*', schema: 'public', table: 'receiving_log' },
           { event: '*', schema: 'public', table: 'receiving_log_items' },
           { event: '*', schema: 'public', table: 'op_transfers' },
@@ -5992,14 +5996,15 @@ ensureDeliveryDaysColumn();
       }, 25000);
     };
 
+    let _rtDebounce = null;
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
         if(msg.event !== 'postgres_changes') return;
         const table = msg.payload?.data?.table;
         if(!table) return;
+
         if(table === 'cust_products') {
-          // For cust_products: reload just that customer's products
           const rec = msg.payload?.data?.record || msg.payload?.data?.old_record;
           const cid = rec?.cust_id;
           if(cid && typeof cid === 'string' && cid.length > 0) {
@@ -6008,14 +6013,27 @@ ensureDeliveryDaysColumn();
               const pricingActive = document.getElementById('page-pricing')?.classList.contains('active');
               if(pricingActive) renderPricing();
             }).catch(()=>{});
-          } else {
-            // Can't determine customer — do full reload
-            loadFromDB();
           }
           return;
         }
-        // For all other tables: full reload
-        loadFromDB();
+
+        if(table === 'orders' || table === 'order_items') {
+          // Debounce — if we just saved ourselves, skip the realtime echo
+          clearTimeout(_rtDebounce);
+          _rtDebounce = setTimeout(()=>{
+            _freshOrders().then(()=>{
+              const orderActive = document.getElementById('page-order')?.classList.contains('active');
+              const dispatchActive = document.getElementById('page-dispatch')?.classList.contains('active');
+              if(orderActive) renderOrders();
+              if(dispatchActive){ renderDispatch(); updateDispSummary(); }
+            });
+          }, 1500); // 1.5s debounce — lets our own save finish first
+          return;
+        }
+
+        // receiving_log, op_transfers etc — full reload but debounced
+        clearTimeout(_rtDebounce);
+        _rtDebounce = setTimeout(()=>loadFromDB(), 1500);
       } catch(e) {}
     };
 
