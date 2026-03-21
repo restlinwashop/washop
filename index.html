@@ -3829,7 +3829,14 @@ saveEO = async function() {
 
     // Update local items to only keep qty>0
     o.items = o.items.filter(x=>x.qty>0);
-    _origSaveEO();
+    // Update order date/note in local state
+    o.deliveryDate = document.getElementById('eo-date').value;
+    o.note = document.getElementById('eo-note').value;
+    closeEO();
+    // Fresh reload so order card shows correct items
+    await _freshOrders();
+    renderOrders(); updateOrderBadge();
+    addActivity('Edited order: '+o.customerName);
     _toast('✓ Order saved', 1500);
   } catch(e) {
     alert('Save failed: '+e.message);
