@@ -2221,22 +2221,11 @@ function openEO(id){
   const delBtn=document.getElementById('eo-delete-btn');
   if(delBtn) delBtn.style.display=o.status==='delivered'?'none':'inline-flex';
   document.getElementById('eo-modal').classList.add('open');
-  // Only fetch from DB if items empty — don't overwrite keypad changes
-  const _doRenderEO = () => {
-    _get('cust_products','?cust_id=eq.'+o.customerId+'&select=product_id').then(cp=>{
-      custProds[o.customerId]=new Set(cp.map(r=>r.product_id));
-      _renderEOItems(o);
-    }).catch(()=>_renderEOItems(o));
-  };
-  if(!o.items || o.items.length===0){
-    document.getElementById('eo-items').innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
-    _getAll('order_items','?order_id=eq.'+id+'&select=*').then(dbItems=>{
-      o.items=dbItems.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name,catId:i.cat_id||'',qty:i.qty}));
-      _doRenderEO();
-    }).catch(()=>_renderEOItems(o));
-  } else {
-    _doRenderEO();
-  }
+  // Render directly from S.orders — no DB fetch needed, _freshOrders already populated items
+  _get('cust_products','?cust_id=eq.'+o.customerId+'&select=product_id').then(cp=>{
+    custProds[o.customerId]=new Set(cp.map(r=>r.product_id));
+    _renderEOItems(o);
+  }).catch(()=>_renderEOItems(o));
 }
 function adjEO(pid,d){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(!it)return;it.qty=Math.max(0,it.qty+d);const el=document.getElementById('eoq-'+pid);if(el)el.textContent=it.qty;}
 function setEOqty(pid,v){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(it)it.qty=v;const el=document.getElementById('eoq-'+pid);if(el)el.textContent=v;}
