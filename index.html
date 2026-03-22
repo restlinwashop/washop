@@ -662,7 +662,6 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <div class="admin-tab" onclick="showAdminTab('categories',this)">Categories</div>
       <div class="admin-tab" onclick="showAdminTab('products',this)">Products</div>
       <div class="admin-tab" onclick="showAdminTab('frequencies',this)">Frequencies</div>
-      <div class="admin-tab" onclick="showAdminTab('archive',this)">🗄 Archive</div>
     </div>
 
     <!-- CUSTOMERS -->
@@ -754,22 +753,6 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       </div>
       <div class="section-title">Custom Frequencies</div>
       <div id="custom-freq-list"></div>
-    </div>
-
-    <!-- ARCHIVE -->
-    <div class="admin-section" id="admin-archive">
-      <div class="add-form">
-        <div class="section-title">🗄 Data Archive</div>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-          WashOps keeps the last <strong>90 days</strong> of active data in memory for fast access.
-          Data older than 90 days can be exported to CSV and removed from the database to keep the system fast.
-        </p>
-        <div id="archive-status" style="margin-bottom:16px;font-size:13px;color:var(--muted)">Checking archive status…</div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="checkArchiveStatus()">🔍 Check Status</button>
-          <button class="btn btn-secondary" onclick="runArchive()" id="archive-btn" style="display:none">⬇ Export & Archive Old Data</button>
-        </div>
-      </div>
     </div>
 
     <!-- DRIVERS -->
@@ -2894,7 +2877,7 @@ function renderCCstock(){
     const th = se?.threshold || 0;
     const recv = S.history.filter(h => h.customerId===ccId && h.productId===p.id && h.type==='receive').reduce((a,b)=>a+b.qty,0);
     const disp = S.history.filter(h => h.customerId===ccId && h.productId===p.id && h.type==='dispatch').reduce((a,b)=>a+b.qty,0);
-    const atCust = ob + recv - disp;
+    const atCust = ob - recv + disp;
     const low = th > 0 && atCust <= th;
     const col = atCust <= 0 ? '#dc2626' : low ? '#d97706' : '#16a34a';
     const rowBg = low ? 'background:#fef2f2;' : '';
@@ -2909,7 +2892,7 @@ function renderCCstock(){
       + '</tr>';
   });
 
-  el.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Opening Balance + Received − Dispatched = At Customer</div>'
+  el.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Opening Balance − Received + Dispatched = At Customer</div>'
     + '<table style="width:100%;border-collapse:collapse">'
     + '<thead><tr style="font-size:11px;color:var(--muted);text-transform:uppercase">'
     + '<th style="text-align:left;padding:6px 8px">Product</th>'
@@ -3063,122 +3046,10 @@ function renderCChistory(){
 // ═══════════════════════════════════════════════
 // ADMIN
 // ═══════════════════════════════════════════════
-// ── Archive functions ──
-async function checkArchiveStatus() {
-  const statusEl = document.getElementById('archive-status');
-  const btnEl = document.getElementById('archive-btn');
-  if (!statusEl) return;
-  statusEl.textContent = 'Checking…';
-  try {
-    const cutoff = _cutoff90();
-    const [oldOrders, oldHistory, oldRecvLog] = await Promise.all([
-      _getAll('orders','?select=id,customer_name,delivery_date&delivery_date=lt.'+cutoff),
-      _getAll('history','?select=id&date=lt.'+cutoff),
-      _getAll('receiving_log','?select=id&received_on=lt.'+cutoff),
-    ]);
-    if (oldOrders.length === 0 && oldHistory.length === 0 && oldRecvLog.length === 0) {
-      statusEl.innerHTML = '<span style="color:var(--green)">✓ No data older than 90 days. Nothing to archive.</span>';
-      if (btnEl) btnEl.style.display = 'none';
-    } else {
-      statusEl.innerHTML = `Found data older than <strong>${cutoff}</strong>:<br>
-        • <strong>${oldOrders.length}</strong> orders<br>
-        • <strong>${oldHistory.length}</strong> history records<br>
-        • <strong>${oldRecvLog.length}</strong> receiving log entries<br><br>
-        <span style="color:var(--warn)">⚠ Export to CSV first, then delete from database.</span>`;
-      if (btnEl) btnEl.style.display = 'inline-flex';
-    }
-  } catch(e) {
-    statusEl.textContent = 'Error: ' + e.message;
-  }
-}
-
-async function runArchive() {
-  if (!confirm('This will export all data older than 90 days to CSV files, then delete it from the database. Are you sure?')) return;
-  const cutoff = _cutoff90();
-  const statusEl = document.getElementById('archive-status');
-  statusEl.textContent = 'Fetching data to archive…';
-  try {
-    // 1. Fetch old data
-    const oldOrders = await _getAll('orders','?select=*&delivery_date=lt.'+cutoff);
-    const oldOrderIds = oldOrders.map(o=>o.id);
-    let oldOrderItems = [];
-    for (let i=0; i<oldOrderIds.length; i+=200) {
-      const batch = oldOrderIds.slice(i,i+200);
-      const rows = await _getAll('order_items','?select=*&order_id=in.('+batch.join(',')+')');
-      oldOrderItems = oldOrderItems.concat(rows);
-    }
-    const oldHistory = await _getAll('history','?select=*&date=lt.'+cutoff);
-    const oldRecvLog = await _getAll('receiving_log','?select=*&received_on=lt.'+cutoff);
-    const oldRecvLogIds = oldRecvLog.map(r=>r.id);
-    let oldRecvItems = [];
-    for (let i=0; i<oldRecvLogIds.length; i+=200) {
-      const batch = oldRecvLogIds.slice(i,i+200);
-      const rows = await _getAll('receiving_log_items','?select=*&log_id=in.('+batch.join(',')+')');
-      oldRecvItems = oldRecvItems.concat(rows);
-    }
-
-    // 2. Export CSVs
-    const dateTag = new Date().toISOString().split('T')[0];
-    _downloadCSV('washops_archive_orders_'+dateTag+'.csv', _toCSV(oldOrders));
-    _downloadCSV('washops_archive_order_items_'+dateTag+'.csv', _toCSV(oldOrderItems));
-    _downloadCSV('washops_archive_history_'+dateTag+'.csv', _toCSV(oldHistory));
-    _downloadCSV('washops_archive_receiving_log_'+dateTag+'.csv', _toCSV(oldRecvLog));
-    _downloadCSV('washops_archive_receiving_log_items_'+dateTag+'.csv', _toCSV(oldRecvItems));
-
-    statusEl.textContent = 'CSVs downloaded. Deleting old data from database…';
-
-    // 3. Delete old data
-    if (oldOrderItems.length > 0) {
-      for (let i=0; i<oldOrderIds.length; i+=200) {
-        const batch = oldOrderIds.slice(i,i+200);
-        await _del('order_items','?order_id=in.('+batch.join(',')+')');
-      }
-    }
-    if (oldOrders.length > 0) await _del('orders','?delivery_date=lt.'+cutoff);
-    if (oldHistory.length > 0) await _del('history','?date=lt.'+cutoff);
-    if (oldRecvItems.length > 0) {
-      for (let i=0; i<oldRecvLogIds.length; i+=200) {
-        const batch = oldRecvLogIds.slice(i,i+200);
-        await _del('receiving_log_items','?log_id=in.('+batch.join(',')+')');
-      }
-    }
-    if (oldRecvLog.length > 0) await _del('receiving_log','?received_on=lt.'+cutoff);
-
-    statusEl.innerHTML = '<span style="color:var(--green)">✓ Archive complete! Old data exported and removed. Database is clean.</span>';
-    document.getElementById('archive-btn').style.display = 'none';
-    _toast('✓ Archive complete', 3000);
-  } catch(e) {
-    statusEl.textContent = '⚠ Error during archive: ' + e.message;
-  }
-}
-
-function _toCSV(rows) {
-  if (!rows || rows.length === 0) return '';
-  const keys = Object.keys(rows[0]);
-  const lines = [keys.join(',')];
-  rows.forEach(r => {
-    lines.push(keys.map(k => {
-      const v = r[k] == null ? '' : String(r[k]);
-      return v.includes(',') || v.includes('"') || v.includes('\n') ? '"'+v.replace(/"/g,'""')+'"' : v;
-    }).join(','));
-  });
-  return lines.join('\n');
-}
-
-function _downloadCSV(filename, csv) {
-  if (!csv) return;
-  const blob = new Blob([csv], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-}
-
 function showAdminTab(id,el){
   document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.admin-section').forEach(s=>s.classList.remove('active'));
   el.classList.add('active');document.getElementById('admin-'+id).classList.add('active');renderAdmin();
-  if(id==='archive') checkArchiveStatus();
 }
 function renderAdmin(){
   // Populate driver filter
@@ -3699,31 +3570,6 @@ const _post = (t, b)    => _q('POST',   t, b);
 const _patch= (t, b, p) => _q('PATCH',  t, b, p);
 const _del  = (t, p)    => _q('DELETE', t, null, p);
 
-// Paginated fetch — bypasses Supabase 1000 row limit
-async function _getAll(table, params) {
-  const pageSize = 1000;
-  let allRows = [], offset = 0;
-  while (true) {
-    const sep = (params && params.includes('?')) ? '&' : '?';
-    const url = _SURL + '/rest/v1/' + table + (params||'') + sep + 'limit=' + pageSize + '&offset=' + offset;
-    const res = await fetch(url, { method:'GET', headers:_hdr('GET') });
-    if (!res.ok) { const t = await res.text(); throw new Error(table+': '+t.slice(0,150)); }
-    const txt = await res.text();
-    const rows = txt ? JSON.parse(txt) : [];
-    allRows = allRows.concat(rows);
-    if (rows.length < pageSize) break;
-    offset += pageSize;
-  }
-  return allRows;
-}
-
-// 90-day cutoff date string
-function _cutoff90() {
-  const d = new Date();
-  d.setDate(d.getDate() - 90);
-  return d.toISOString().split('T')[0];
-}
-
 function _toast(msg, ms) {
   let el = document.getElementById('_toast');
   if (!el) {
@@ -3750,20 +3596,10 @@ function _syncBadge(ok) {
 
 async function _freshOrders() {
   try {
-    const cutoff = _cutoff90();
-    const orders = await _getAll('orders','?select=*&delivery_date=gte.'+cutoff+'&order=delivery_date.desc,route_order.asc');
-    const orderIds = orders.map(o=>o.id);
-    // Fetch order_items for these orders only — avoids full table scan
-    let ois = [];
-    if (orderIds.length > 0) {
-      // Supabase IN filter has limits — batch if needed
-      const batchSize = 200;
-      for (let i = 0; i < orderIds.length; i += batchSize) {
-        const batch = orderIds.slice(i, i + batchSize);
-        const rows = await _getAll('order_items','?select=*&order_id=in.('+batch.join(',')+')');
-        ois = ois.concat(rows);
-      }
-    }
+    const [orders, ois] = await Promise.all([
+      _get('orders','?select=*&order=delivery_date.desc,route_order.asc&limit=10000'),
+      _get('order_items','?select=*&limit=10000')
+    ]);
     const imap={};
     ois.forEach(i=>{ if(!imap[i.order_id]) imap[i.order_id]=[]; imap[i.order_id].push({id:i.id,productId:i.product_id,productName:i.product_name,catId:i.cat_id,qty:i.qty}); });
     S.orders=orders.map(o=>({
@@ -3779,7 +3615,7 @@ async function _freshOrders() {
 
 async function _freshCustProds() {
   try {
-    const rows = await _getAll('cust_products','?select=*');
+    const rows = await _get('cust_products','?select=*&limit=10000');
     custProds={};
     rows.forEach(r=>{ if(!custProds[r.cust_id]) custProds[r.cust_id]=new Set(); custProds[r.cust_id].add(r.product_id); });
     S.customers.forEach(c=>{ if(!custProds[c.id]) custProds[c.id]=new Set(); });
@@ -3788,7 +3624,7 @@ async function _freshCustProds() {
 
 async function _freshCustomers() {
   try {
-    const custs = await _getAll('customers','?select=*&order=name');
+    const custs = await _get('customers','?select=*&order=name&limit=10000');
     S.customers = custs.map(c => ({
       id:c.id, name:c.name, address:c.address||'', frequency:c.frequency||'Weekly',
       dueDay:c.due_day||4,
@@ -3810,19 +3646,19 @@ async function loadFromDB() {
   _toast('Connecting to database…', 4000);
   try {
     const [custs,drvs,cats,prods,cpRows,orders,ois,stock,rcvLog,rcvItems,hist,prices,pkgs] = await Promise.all([
-      _getAll('customers','?select=*&order=name'),
-      _getAll('drivers','?select=*&order=name'),
-      _getAll('categories','?select=*&order=name'),
-      _getAll('products','?select=*&order=name'),
-      _getAll('cust_products','?select=*'),
-      _getAll('orders','?select=*&delivery_date=gte.'+_cutoff90()+'&order=delivery_date.desc,route_order.asc'),
-      _getAll('order_items','?select=*&order_id=in.('+((await _getAll('orders','?select=id&delivery_date=gte.'+_cutoff90())).map(o=>o.id).join(',')||'none')+')'),
-      _getAll('stock_entries','?select=*'),
-      _getAll('receiving_log','?select=*&received_on=gte.'+_cutoff90()+'&order=received_on.desc,time.desc'),
-      _getAll('receiving_log_items','?select=*'),
-      _getAll('history','?select=*&date=gte.'+_cutoff90()+'&order=date.desc'),
-      _getAll('cust_prices','?select=*'),
-      _getAll('packages','?select=*&order=name'),
+      _get('customers','?select=*&order=name&limit=10000'),
+      _get('drivers','?select=*&order=name&limit=1000'),
+      _get('categories','?select=*&order=name&limit=1000'),
+      _get('products','?select=*&order=name&limit=10000'),
+      _get('cust_products','?select=*&limit=10000'),
+      _get('orders','?select=*&order=delivery_date.desc,route_order.asc&limit=10000'),
+      _get('order_items','?select=*&limit=10000'),
+      _get('stock_entries','?select=*&limit=10000'),
+      _get('receiving_log','?select=*&order=received_on.desc,time.desc&limit=10000'),
+      _get('receiving_log_items','?select=*&limit=10000'),
+      _get('history','?select=*&order=date.desc&limit=10000'),
+      _get('cust_prices','?select=*&limit=10000'),
+      _get('packages','?select=*&order=name&limit=1000'),
     ]);
 
     S.customers = custs.map(c => ({
