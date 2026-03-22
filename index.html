@@ -3975,7 +3975,7 @@ async function undoDelivery(id) {
   try {
     await _patch('orders',{status:'packed'},'?id=eq.'+id);
     o.status = 'packed';
-    renderDriverOrders();
+    renderDriverApp();
     _toast('✓ Marked as packed', 1500);
   } catch(e) { alert('Failed: '+e.message); }
 }
