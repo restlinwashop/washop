@@ -1388,19 +1388,19 @@ document.getElementById('recv-date').value=todayStr();
 // ═══════════════════════════════════════════════
 // KEYPAD (#6 decimal for prices)
 // ═══════════════════════════════════════════════
-let kpCb=null,kpVal='',kpIsPrice=false;
+let kpCb=null,kpVal='',kpIsPrice=false,kpFresh=true;
 function openKP(title,sub,cb,init,isPrice){
-  kpCb=cb;kpIsPrice=!!isPrice;kpVal=init?String(init):'';
+  kpCb=cb;kpIsPrice=!!isPrice;kpVal=init?String(init):'';kpFresh=true;
   document.getElementById('kp-title').textContent=title;
   document.getElementById('kp-sub').textContent=isPrice?'Enter in cents — e.g. 250 = $2.50':sub;
-  document.getElementById('kp-disp').textContent=kpVal||'0';
+  document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):(kpVal||'0');
   document.getElementById('kp-modal').classList.add('open');
   // Lock background scroll
   document.body.style.overflow='hidden';
   document.body.style.touchAction='none';
 }
-function kp(n){kpVal=(kpVal===''||kpVal==='0')?n:kpVal+n;if(parseInt(kpVal)>9999999)kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
-function kpDel(){kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
+function kp(n){if(kpFresh){kpVal=n;kpFresh=false;}else{kpVal=(kpVal===''||kpVal==='0')?n:kpVal+n;}if(parseInt(kpVal)>9999999)kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
+function kpDel(){kpFresh=false;kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
 function kpOK(){if(kpCb){const v=kpIsPrice?parseInt(kpVal||'0'):parseInt(kpVal)||0;kpCb(v);}closeKP();}
 function closeKP(){
   document.getElementById('kp-modal').classList.remove('open');
@@ -2223,7 +2223,7 @@ function openEO(id){
   document.getElementById('eo-items').innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
   document.getElementById('eo-modal').classList.add('open');
   // Fresh load from DB
-  _getAll('order_items','?select=*&order_id=eq.'+id).then(dbItems=>{
+  _getAll('order_items','?order_id=eq.'+id+'&select=*').then(dbItems=>{
     o.items=dbItems.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name,catId:i.cat_id||'',qty:i.qty}));
     // Also fresh load custProds for this customer
     return _get('cust_products','?cust_id=eq.'+o.customerId+'&select=product_id').then(cp=>{
@@ -3978,7 +3978,7 @@ saveEO = async function() {
     },'?id=eq.'+eoId);
 
     // Get current DB items for this order — use _getAll to avoid limit issues
-    const dbItemsRaw = await _getAll('order_items','?select=id,product_id,qty&order_id=eq.'+eoId);
+    const dbItemsRaw = await _getAll('order_items','?order_id=eq.'+eoId+'&select=id,product_id,qty');
     // Deduplicate — keep only one per product_id (take first)
     const seen = new Set();
     const dbItems = dbItemsRaw.filter(i => { if(seen.has(i.product_id)) return false; seen.add(i.product_id); return true; });
@@ -3991,15 +3991,16 @@ saveEO = async function() {
       }
     }
 
-    // Update or insert remaining items
-    for(const it of o.items.filter(x=>x.qty>0)) {
+    // Update or insert remaining items — each independently to avoid race conditions
+    const savePromises = o.items.filter(x=>x.qty>0).map(it => {
       const existing = dbItems.find(d=>d.product_id===it.productId);
       if(existing) {
-        await _patch('order_items',{qty:it.qty},'?id=eq.'+existing.id);
+        return _patch('order_items',{qty:it.qty},'?order_id=eq.'+eoId+'&product_id=eq.'+it.productId);
       } else {
-        await _post('order_items',[{id:uid(),order_id:eoId,product_id:it.productId,product_name:it.productName,cat_id:it.catId||'',qty:it.qty}]);
+        return _post('order_items',[{id:uid(),order_id:eoId,product_id:it.productId,product_name:it.productName,cat_id:it.catId||'',qty:it.qty}]);
       }
-    }
+    });
+    await Promise.all(savePromises);
 
     // Update local items to only keep qty>0
     o.items = o.items.filter(x=>x.qty>0);
