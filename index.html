@@ -1819,8 +1819,15 @@ function renderWeekStrip(){
 function renderOrders(){
   renderWeekStrip();
   document.getElementById('order-day-label').textContent=fmtFull(selDay);
-  // Always fresh-load from DB before rendering to ensure items are correct
-  _freshOrders().then(()=>_renderOrdersInner());
+
+  // Check if any orders for this day have empty items — if so, reload fresh first
+  const dayOrders=S.orders.filter(o=>o.deliveryDate===selDay);
+  const hasEmptyItems = dayOrders.some(o=>o.items.length===0 && o.note!=='PU Only' && o.status!=='delivered');
+  if(hasEmptyItems){
+    _freshOrders().then(()=>_renderOrdersInner());
+    return;
+  }
+  _renderOrdersInner();
 }
 
 function _renderOrdersInner(){
@@ -3550,6 +3557,23 @@ function _hdr(method) {
     'Prefer': (method === 'POST' || method === 'PATCH') ? 'return=representation' : ''
   };
 }
+async function _getAll(table, params) {
+  const pageSize = 1000;
+  let allRows = [];
+  let offset = 0;
+  while (true) {
+    const sep = (params && params.includes('?')) ? '&' : '?';
+    const url = _SURL + '/rest/v1/' + table + (params || '') + sep + 'limit=' + pageSize + '&offset=' + offset;
+    const res = await fetch(url, { method: 'GET', headers: _hdr('GET') });
+    if (!res.ok) { const t = await res.text(); throw new Error(table + ': ' + t.slice(0,150)); }
+    const txt = await res.text();
+    const rows = txt ? JSON.parse(txt) : [];
+    allRows = allRows.concat(rows);
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+  return allRows;
+}
 async function _q(method, table, body, params) {
   const url = _SURL + '/rest/v1/' + table + (params || '');
   const opts = { method: method, headers: _hdr(method) };
@@ -3590,8 +3614,8 @@ function _syncBadge(ok) {
 async function _freshOrders() {
   try {
     const [orders, ois] = await Promise.all([
-      _get('orders','?select=*&order=delivery_date.desc,route_order.asc&limit=10000'),
-      _get('order_items','?select=*&limit=10000')
+      _getAll('orders','?select=*&order=delivery_date.desc,route_order.asc'),
+      _getAll('order_items','?select=*')
     ]);
     const imap={};
     ois.forEach(i=>{ if(!imap[i.order_id]) imap[i.order_id]=[]; imap[i.order_id].push({id:i.id,productId:i.product_id,productName:i.product_name,catId:i.cat_id,qty:i.qty}); });
@@ -3608,7 +3632,7 @@ async function _freshOrders() {
 
 async function _freshCustProds() {
   try {
-    const rows = await _get('cust_products','?select=*&limit=10000');
+    const rows = await _getAll('cust_products','?select=*');
     custProds={};
     rows.forEach(r=>{ if(!custProds[r.cust_id]) custProds[r.cust_id]=new Set(); custProds[r.cust_id].add(r.product_id); });
     S.customers.forEach(c=>{ if(!custProds[c.id]) custProds[c.id]=new Set(); });
@@ -3617,7 +3641,7 @@ async function _freshCustProds() {
 
 async function _freshCustomers() {
   try {
-    const custs = await _get('customers','?select=*&order=name&limit=10000');
+    const custs = await _getAll('customers','?select=*&order=name');
     S.customers = custs.map(c => ({
       id:c.id, name:c.name, address:c.address||'', frequency:c.frequency||'Weekly',
       dueDay:c.due_day||4,
@@ -3639,19 +3663,19 @@ async function loadFromDB() {
   _toast('Connecting to database…', 4000);
   try {
     const [custs,drvs,cats,prods,cpRows,orders,ois,stock,rcvLog,rcvItems,hist,prices,pkgs] = await Promise.all([
-      _get('customers','?select=*&order=name&limit=10000'),
+      _getAll('customers','?select=*&order=name'),
       _get('drivers','?select=*&order=name&limit=1000'),
       _get('categories','?select=*&order=name&limit=1000'),
-      _get('products','?select=*&order=name&limit=10000'),
-      _get('cust_products','?select=*&limit=10000'),
-      _get('orders','?select=*&order=delivery_date.desc,route_order.asc&limit=10000'),
-      _get('order_items','?select=*&limit=10000'),
-      _get('stock_entries','?select=*&limit=10000'),
-      _get('receiving_log','?select=*&order=received_on.desc,time.desc&limit=10000'),
-      _get('receiving_log_items','?select=*&limit=10000'),
-      _get('history','?select=*&order=date.desc&limit=10000'),
-      _get('cust_prices','?select=*&limit=10000'),
-      _get('packages','?select=*&order=name&limit=1000'),
+      _getAll('products','?select=*&order=name'),
+      _getAll('cust_products','?select=*'),
+      _getAll('orders','?select=*&order=delivery_date.desc,route_order.asc'),
+      _getAll('order_items','?select=*'),
+      _getAll('stock_entries','?select=*'),
+      _getAll('receiving_log','?select=*&order=received_on.desc,time.desc'),
+      _getAll('receiving_log_items','?select=*'),
+      _getAll('history','?select=*&order=date.desc'),
+      _getAll('cust_prices','?select=*'),
+      _getAll('packages','?select=*&order=name'),
     ]);
 
     S.customers = custs.map(c => ({
