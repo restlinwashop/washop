@@ -4002,6 +4002,8 @@ saveEO = async function() {
     o.deliveryDate = document.getElementById('eo-date').value;
     o.note = document.getElementById('eo-note').value;
     closeEO();
+    // Fresh reload so order card shows correct items
+    await _freshOrders();
     renderOrders(); updateOrderBadge();
     addActivity('Edited order: '+o.customerName);
     _toast('✓ Order saved', 1500);
@@ -6208,7 +6210,9 @@ ensureDeliveryDaysColumn();
         }
 
         if(table === 'orders' || table === 'order_items') {
-          // Debounce — if we just saved ourselves, skip the realtime echo
+          // Skip realtime refresh if Edit Order modal is open — user has unsaved changes
+          const _eoModalOpen = eoId && document.getElementById('eo-modal')?.classList.contains('open');
+          if(_eoModalOpen) return;
           clearTimeout(_rtDebounce);
           _rtDebounce = setTimeout(()=>{
             _freshOrders().then(()=>{
@@ -6217,7 +6221,7 @@ ensureDeliveryDaysColumn();
               if(orderActive) renderOrders();
               if(dispatchActive){ renderDispatch(); updateDispSummary(); }
             });
-          }, 1500); // 1.5s debounce — lets our own save finish first
+          }, 1500);
           return;
         }
 
