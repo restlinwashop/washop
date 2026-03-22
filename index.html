@@ -527,6 +527,10 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       </div>
     </div>
     <div class="day-strip" id="day-strip"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Driver</span>
+      <div id="order-driver-filter" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
     <div id="orders-list"><div class="empty">Select a day to see orders</div></div>
   </div>
 
@@ -1744,7 +1748,7 @@ function exportDispatchedCSV(){
 // ═══════════════════════════════════════════════
 // ORDER PAGE — Driver/Linen/Towel grouped view
 // ═══════════════════════════════════════════════
-let curWeekMon=getMonday(todayStr()),selDay=todayStr();
+let curWeekMon=getMonday(todayStr()),selDay=todayStr(),selDriverFilter='all';
 
 function initOrder(){
   curWeekMon=getMonday(todayStr());
@@ -1754,7 +1758,7 @@ function initOrder(){
   renderOrders();
 }
 function shiftWeek(d){curWeekMon=addDays(curWeekMon,d*7);renderWeekStrip();renderOrders();}
-function selectDay(d){selDay=d;renderWeekStrip();renderOrders();}
+function selectDay(d){selDay=d;selDriverFilter='all';renderWeekStrip();renderOrders();}
 
 async function autoCreateFixedOrders(){
   const fixedCusts=S.customers.filter(c=>c.fixedOrder&&c.active);
@@ -1830,18 +1834,40 @@ function renderWeekStrip(){
   document.getElementById('week-label').textContent=`${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} – ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
 }
 
+function renderOrderDriverFilter() {
+  const el = document.getElementById('order-driver-filter');
+  if (!el) return;
+  const dayOrders = S.orders.filter(o => o.deliveryDate === selDay);
+  // Get drivers that have orders today
+  const driverIds = new Set();
+  dayOrders.forEach(o => {
+    const c = S.customers.find(x => x.id === o.customerId);
+    driverIds.add(c?.driverId || '__none__');
+  });
+  const activeDrivers = S.drivers.filter(d => driverIds.has(d.id));
+  if (driverIds.has('__none__')) activeDrivers.push({id:'__none__', name:'Unassigned'});
+
+  let html = `<button onclick="selDriverFilter='all';renderOrderDriverFilter();_renderOrdersInner()"
+    style="padding:5px 14px;border-radius:20px;border:2px solid ${selDriverFilter==='all'?'var(--accent)':'var(--border)'};
+    background:${selDriverFilter==='all'?'var(--accent)':'#fff'};color:${selDriverFilter==='all'?'#fff':'var(--text)'};
+    font-size:12px;font-weight:700;cursor:pointer">All</button>`;
+  activeDrivers.forEach(d => {
+    const active = selDriverFilter === d.id;
+    html += `<button onclick="selDriverFilter='${d.id}';renderOrderDriverFilter();_renderOrdersInner()"
+      style="padding:5px 14px;border-radius:20px;border:2px solid ${active?'var(--accent)':'var(--border)'};
+      background:${active?'var(--accent)':'#fff'};color:${active?'#fff':'var(--text)'};
+      font-size:12px;font-weight:700;cursor:pointer">${d.name}</button>`;
+  });
+  el.innerHTML = html;
+}
+
 function renderOrders(){
   renderWeekStrip();
   document.getElementById('order-day-label').textContent=fmtFull(selDay);
+  renderOrderDriverFilter();
 
-  // Check if any orders for this day have empty items — if so, reload fresh first
-  const dayOrders=S.orders.filter(o=>o.deliveryDate===selDay);
-  const hasEmptyItems = dayOrders.some(o=>o.items.length===0 && o.note!=='PU Only' && o.status!=='delivered');
-  if(hasEmptyItems){
-    _freshOrders().then(()=>_renderOrdersInner());
-    return;
-  }
-  _renderOrdersInner();
+  // Always fresh-load from DB before rendering to ensure items are correct
+  _freshOrders().then(()=>{ renderOrderDriverFilter(); _renderOrdersInner(); });
 }
 
 function _renderOrdersInner(){
@@ -1876,6 +1902,8 @@ function _renderOrdersInner(){
   const allDriverIds=[...driverOrder,'__none__'];
 
   allDriverIds.forEach(did=>{
+    // Apply driver filter
+    if(selDriverFilter!=='all' && did!==selDriverFilter) return;
     ['linen','towel'].forEach(type=>{
       const drv=S.drivers.find(d=>d.id===did);
       const orders=dayOrders.filter(o=>{
@@ -2195,7 +2223,7 @@ function openEO(id){
   document.getElementById('eo-items').innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
   document.getElementById('eo-modal').classList.add('open');
   // Fresh load from DB
-  _get('order_items','?order_id=eq.'+id+'&select=*').then(dbItems=>{
+  _getAll('order_items','?select=*&order_id=eq.'+id).then(dbItems=>{
     o.items=dbItems.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name,catId:i.cat_id||'',qty:i.qty}));
     // Also fresh load custProds for this customer
     return _get('cust_products','?cust_id=eq.'+o.customerId+'&select=product_id').then(cp=>{
@@ -3949,8 +3977,11 @@ saveEO = async function() {
       note: document.getElementById('eo-note').value
     },'?id=eq.'+eoId);
 
-    // Get current DB items for this order
-    const dbItems = await _get('order_items','?order_id=eq.'+eoId+'&select=id,product_id,qty');
+    // Get current DB items for this order — use _getAll to avoid limit issues
+    const dbItemsRaw = await _getAll('order_items','?select=id,product_id,qty&order_id=eq.'+eoId);
+    // Deduplicate — keep only one per product_id (take first)
+    const seen = new Set();
+    const dbItems = dbItemsRaw.filter(i => { if(seen.has(i.product_id)) return false; seen.add(i.product_id); return true; });
     const localPids = new Set(o.items.filter(it=>it.qty>0).map(it=>it.productId));
 
     // Delete items removed from order
