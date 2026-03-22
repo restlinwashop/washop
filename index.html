@@ -3760,12 +3760,11 @@ async function _freshOrders() {
       note:o.note||'', isManual:o.is_manual||false,
       checkedItems:o.checked_items||{}, bagsCollected:o.bags_collected||0
     }));
-    // If EO modal is open, restore user's unsaved item changes and re-render
+    // If EO modal is open, restore user's unsaved item changes (no re-render — user is mid-edit)
     if(eoId && document.getElementById('eo-modal')?.classList.contains('open')){
       const editingOrder = S.orders.find(x=>x.id===eoId);
       if(editingOrder && window._eoUnsavedItems){
         editingOrder.items = window._eoUnsavedItems.map(x=>({...x}));
-        _renderEOItems(editingOrder);
       }
     }
   } catch(e){ console.warn('_freshOrders:', e.message); }
@@ -4010,7 +4009,6 @@ saveEO = async function() {
     // Update order date/note in local state
     o.deliveryDate = document.getElementById('eo-date').value;
     o.note = document.getElementById('eo-note').value;
-    // Fresh reload BEFORE closing — so restore mechanism still works
     await _freshOrders();
     closeEO();
     renderOrders(); updateOrderBadge();
