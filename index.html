@@ -3951,6 +3951,7 @@ confirmDelivery = async function(id) {
 const _origSaveEO = saveEO;
 saveEO = async function() {
   const o = S.orders.find(x => x.id===eoId); if (!o) return;
+  _rtPaused = true;
   
   const totalQty = o.items.reduce((s,it) => s + (it.qty||0), 0);
   if(totalQty === 0) {
@@ -4002,12 +4003,13 @@ saveEO = async function() {
     o.deliveryDate = document.getElementById('eo-date').value;
     o.note = document.getElementById('eo-note').value;
     closeEO();
-    // Fresh reload so order card shows correct items
     await _freshOrders();
+    _rtPaused = false;
     renderOrders(); updateOrderBadge();
     addActivity('Edited order: '+o.customerName);
     _toast('✓ Order saved', 1500);
   } catch(e) {
+    _rtPaused = false;
     alert('Save failed: '+e.message);
   }
 };
@@ -6189,6 +6191,7 @@ ensureDeliveryDaysColumn();
     };
 
     let _rtDebounce = null;
+    let _rtPaused = false;
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
@@ -6210,7 +6213,7 @@ ensureDeliveryDaysColumn();
         }
 
         if(table === 'orders' || table === 'order_items') {
-          // Skip realtime refresh if Edit Order modal is open — user has unsaved changes
+          if(_rtPaused) return;
           const _eoModalOpen = eoId && document.getElementById('eo-modal')?.classList.contains('open');
           if(_eoModalOpen) return;
           clearTimeout(_rtDebounce);
