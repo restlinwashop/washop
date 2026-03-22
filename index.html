@@ -4010,9 +4010,9 @@ saveEO = async function() {
     // Update order date/note in local state
     o.deliveryDate = document.getElementById('eo-date').value;
     o.note = document.getElementById('eo-note').value;
-    closeEO();
-    // Fresh reload so order card shows correct items
+    // Fresh reload BEFORE closing — so restore mechanism still works
     await _freshOrders();
+    closeEO();
     renderOrders(); updateOrderBadge();
     addActivity('Edited order: '+o.customerName);
     _toast('✓ Order saved', 1500);
