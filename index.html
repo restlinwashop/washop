@@ -2213,6 +2213,7 @@ function _renderEOItems(o){
 
 function openEO(id){
   eoId=id;
+  window._eoUnsavedItems=null;
   const o=S.orders.find(x=>x.id===id); if(!o) return;
   document.getElementById('eo-title').textContent='Edit Order — '+o.customerName;
   document.getElementById('eo-sub').textContent=fmtD(o.deliveryDate)+' · '+o.status.toUpperCase();
@@ -2228,7 +2229,7 @@ function openEO(id){
   }).catch(()=>_renderEOItems(o));
 }
 function adjEO(pid,d){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(!it)return;it.qty=Math.max(0,it.qty+d);const el=document.getElementById('eoq-'+pid);if(el)el.textContent=it.qty;}
-function setEOqty(pid,v){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(it)it.qty=v;const el=document.getElementById('eoq-'+pid);if(el)el.textContent=v;}
+function setEOqty(pid,v){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(it)it.qty=v;const el=document.getElementById('eoq-'+pid);if(el)el.textContent=v;window._eoUnsavedItems=o.items.map(x=>({...x}));}
 async function removeEOitem(pid){
   const o=S.orders.find(x=>x.id===eoId); if(!o) return;
   const it=o.items.find(x=>x.productId===pid); if(!it) return;
@@ -2273,7 +2274,7 @@ function deleteOrder(){
   addActivity('Deleted order: '+(o?.customerName||''));
   closeEO();renderOrders();updateOrderBadge();
 }
-function closeEO(){document.getElementById('eo-modal').classList.remove('open');eoId=null;}
+function closeEO(){document.getElementById('eo-modal').classList.remove('open');eoId=null;window._eoUnsavedItems=null;}
 
 // ═══════════════════════════════════════════════
 // DISPATCH
@@ -3759,6 +3760,13 @@ async function _freshOrders() {
       note:o.note||'', isManual:o.is_manual||false,
       checkedItems:o.checked_items||{}, bagsCollected:o.bags_collected||0
     }));
+    // If EO modal is open, restore user's unsaved item changes
+    if(eoId && document.getElementById('eo-modal')?.classList.contains('open')){
+      const editingOrder = S.orders.find(x=>x.id===eoId);
+      if(editingOrder && window._eoUnsavedItems) {
+        editingOrder.items = window._eoUnsavedItems;
+      }
+    }
   } catch(e){ console.warn('_freshOrders:', e.message); }
 }
 
@@ -3951,7 +3959,6 @@ confirmDelivery = async function(id) {
 const _origSaveEO = saveEO;
 saveEO = async function() {
   const o = S.orders.find(x => x.id===eoId); if (!o) return;
-  _rtPaused = true;
   
   const totalQty = o.items.reduce((s,it) => s + (it.qty||0), 0);
   if(totalQty === 0) {
@@ -4003,13 +4010,12 @@ saveEO = async function() {
     o.deliveryDate = document.getElementById('eo-date').value;
     o.note = document.getElementById('eo-note').value;
     closeEO();
+    // Fresh reload so order card shows correct items
     await _freshOrders();
-    _rtPaused = false;
     renderOrders(); updateOrderBadge();
     addActivity('Edited order: '+o.customerName);
     _toast('✓ Order saved', 1500);
   } catch(e) {
-    _rtPaused = false;
     alert('Save failed: '+e.message);
   }
 };
@@ -6191,7 +6197,6 @@ ensureDeliveryDaysColumn();
     };
 
     let _rtDebounce = null;
-    let _rtPaused = false;
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
@@ -6213,7 +6218,7 @@ ensureDeliveryDaysColumn();
         }
 
         if(table === 'orders' || table === 'order_items') {
-          if(_rtPaused) return;
+          // Skip realtime refresh if Edit Order modal is open — user has unsaved changes
           const _eoModalOpen = eoId && document.getElementById('eo-modal')?.classList.contains('open');
           if(_eoModalOpen) return;
           clearTimeout(_rtDebounce);
