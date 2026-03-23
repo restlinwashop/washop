@@ -5063,10 +5063,12 @@ bulkSetRoute = function(cid, val) {
 let opQtys = {}; // productId -> qty to send
 
 function initOperation() {
-  // Set default date to tomorrow (preparing for next day)
-  const tomorrow = addDays(todayStr(), 1);
+  // Set default date to today (skip weekends → Monday)
+  const _td = todayStr();
+  const _dow = new Date(_td+'T00:00:00').getDay();
+  const opDefault = _dow === 6 ? addDays(_td,2) : _dow === 0 ? addDays(_td,1) : _td;
   const el = document.getElementById('op-date');
-  if(el && !el.value) el.value = tomorrow;
+  if(el && !el.value) el.value = opDefault;
   // Init S.opTransfers if not loaded
   if(!S.opTransfers) S.opTransfers = [];
   renderOperation();
@@ -5076,21 +5078,21 @@ function renderOperation() {
   const date = document.getElementById('op-date')?.value || todayStr();
   opQtys = {};
 
-  // ── Target dates: skip Sunday (no deliveries), jump to Monday ──
-  // Operation runs Mon-Fri. Deliveries run Mon-Sat.
-  function nextOpDeliveryDay(fromDate, offset) {
-    let d = addDays(fromDate, offset);
-    const dow = new Date(d+'T00:00:00').getDay();
-    if(dow === 0) d = addDays(d, 1); // Sunday → Monday
-    return d;
+  // ── Target dates: 1 day ahead normally; Friday → Saturday + Monday ──
+  // Operation runs Mon-Fri only. On Friday, prepare for both Sat and Mon deliveries.
+  const _opDow = new Date(date+'T00:00:00').getDay();
+  let prepDates;
+  if (_opDow === 5) { // Friday
+    prepDates = [addDays(date, 1), addDays(date, 3)]; // Saturday + Monday
+    document.getElementById('op-date-label').textContent = fmtD(addDays(date,1)) + ' + ' + fmtD(addDays(date,3));
+  } else {
+    prepDates = [addDays(date, 1)];
+    document.getElementById('op-date-label').textContent = fmtD(addDays(date, 1));
   }
-  const tomorrow = nextOpDeliveryDay(date, 1);
-  const dayAfter  = nextOpDeliveryDay(date, 2);
-  document.getElementById('op-date-label').textContent = fmtD(tomorrow) + ' + ' + fmtD(dayAfter);
 
-  // ── Required: pending orders for TOMORROW and DAY AFTER from selected date ──
+  // ── Required: pending orders for preparation target dates ──
   const targetOrders = S.orders.filter(o =>
-    (o.deliveryDate === tomorrow || o.deliveryDate === dayAfter) && o.status === 'pending'
+    prepDates.includes(o.deliveryDate) && o.status === 'pending'
   );
 
   const required = {};
