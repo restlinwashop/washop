@@ -2087,6 +2087,11 @@ function _renderOrdersInner(){
 
   html+=groups.map(g=>{
     const allPacked=g.orders.every(o=>o.status!=='pending');
+    const packedCount=g.orders.filter(o=>o.status!=='pending').length;
+    const pendingCount=g.orders.length-packedCount;
+    const progressStr=allPacked
+      ?`${g.orders.length} orders · All packed ✓`
+      :`${g.orders.length} orders · ${packedCount} packed ✓ ${pendingCount} pending`;
     const groupTotals={};
     g.orders.forEach(o=>{
       const c=S.customers.find(x=>x.id===o.customerId);
@@ -2100,6 +2105,7 @@ function _renderOrdersInner(){
       <div class="driver-group-hdr ${g.type==='towel'?'towel':''} ${allPacked?'done':''}">
         <span class="driver-group-type ${g.type==='linen'?'type-linen':'type-towel'}">${g.type.toUpperCase()}</span>
         <span class="driver-group-name">${g.driverName}${g.vehicle?' — '+g.vehicle:''}</span>
+        <span style="font-size:11px;font-family:'DM Mono',monospace;color:${allPacked?'#86efac':'#9ca3af'};white-space:nowrap;font-weight:${allPacked?'700':'400'}">${progressStr}</span>
         <span class="driver-group-summary">${summaryStr}</span>
       </div>
       <div class="driver-group-body ${allPacked?'driver-group-done':''}">
