@@ -1101,7 +1101,10 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <button class="kp-btn" onclick="kp('1')">1</button><button class="kp-btn" onclick="kp('2')">2</button><button class="kp-btn" onclick="kp('3')">3</button>
       <button class="kp-btn kp-del" onclick="kpDel()">⌫</button><button class="kp-btn" onclick="kp('0')">0</button><button class="kp-btn kp-ok" onclick="kpOK()">OK</button>
     </div>
-    <div style="margin-top:10px"><button class="btn btn-secondary w-full" onclick="closeKP()">Cancel</button></div>
+    <div id="kp-send-f2-wrap" style="display:none;margin-top:8px">
+      <button class="btn btn-primary w-full" onclick="kpSendF2()">📤 Send to F2</button>
+    </div>
+    <div style="margin-top:8px"><button class="btn btn-secondary w-full" onclick="closeKP()">Cancel</button></div>
   </div>
 </div>
 
@@ -1389,11 +1392,12 @@ document.getElementById('recv-date').value=todayStr();
 // KEYPAD (#6 decimal for prices)
 // ═══════════════════════════════════════════════
 let kpCb=null,kpVal='',kpIsPrice=false,kpFresh=true;
-function openKP(title,sub,cb,init,isPrice){
+function openKP(title,sub,cb,init,isPrice,showSendF2){
   kpCb=cb;kpIsPrice=!!isPrice;kpVal=init?String(init):'';kpFresh=true;
   document.getElementById('kp-title').textContent=title;
   document.getElementById('kp-sub').textContent=isPrice?'Enter in cents — e.g. 250 = $2.50':sub;
   document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):(kpVal||'0');
+  document.getElementById('kp-send-f2-wrap').style.display=showSendF2?'':'none';
   document.getElementById('kp-modal').classList.add('open');
   // Lock background scroll
   document.body.style.overflow='hidden';
@@ -1402,8 +1406,10 @@ function openKP(title,sub,cb,init,isPrice){
 function kp(n){if(kpFresh){kpVal=n;kpFresh=false;}else{kpVal=(kpVal===''||kpVal==='0')?n:kpVal+n;}if(parseInt(kpVal)>9999999)kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
 function kpDel(){kpFresh=false;kpVal=kpVal.slice(0,-1);document.getElementById('kp-disp').textContent=kpIsPrice?'$'+(parseInt(kpVal||'0')/100).toFixed(2):kpVal||'0';}
 function kpOK(){if(kpCb){const v=kpIsPrice?parseInt(kpVal||'0'):parseInt(kpVal)||0;kpCb(v);}closeKP();}
+function kpSendF2(){if(kpCb){const v=parseInt(kpVal)||0;kpCb(v);}closeKP();saveOpTransfer();}
 function closeKP(){
   document.getElementById('kp-modal').classList.remove('open');
+  document.getElementById('kp-send-f2-wrap').style.display='none';
   document.body.style.overflow='';
   document.body.style.touchAction='';
   kpCb=null;
@@ -5118,7 +5124,8 @@ function renderOperation() {
       const cat = S.categories.find(c => c.id === r.catId);
       const catType = cat?.type || 'linen';
       const statusColor = isDone ? '#15803d' : sent > 0 ? '#92400e' : '#6b7280';
-      return `<div style="background:#fff;border:2px solid ${isDone?'#86efac':sent>0?'#fde68a':'var(--border)'};border-radius:12px;padding:16px;transition:border-color .3s">
+      return `<div onclick="openKP('${r.name}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;renderOperation();},${opQtys[pid]||0},false,true)"
+        style="background:#fff;border:2px solid ${isDone?'#86efac':sent>0?'#fde68a':'var(--border)'};border-radius:12px;padding:16px;transition:border-color .3s;cursor:pointer;-webkit-tap-highlight-color:transparent">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
           <span style="font-size:14px;font-weight:700;flex:1">${r.name}</span>
           <span class="badge ${catType==='towel'?'bg-blue':'bg-green'}" style="font-size:10px">${cat?.name||''}</span>
@@ -5177,7 +5184,7 @@ function renderOperation() {
   };
 
   const grouped = {}; groupOrder.forEach(g => grouped[g] = []);
-  S.products.forEach(p => grouped[_opGroup(p)].push(p));
+  S.products.forEach(p => { if(!reqKeys.includes(p.id)) grouped[_opGroup(p)].push(p); });
 
   let entryHtml = '';
   groupOrder.forEach(groupName => {
@@ -5197,7 +5204,7 @@ function renderOperation() {
       entryHtml += `<div style="background:#fff;border:2px solid ${qty>0?gc.border:'var(--border)'};border-radius:14px;padding:14px;transition:border-color .2s${!tracked?';opacity:0.85':''}">
         <div style="font-size:12px;font-weight:700;margin-bottom:8px;line-height:1.3;min-height:32px">${pname}${!tracked?' <span style="font-size:9px;color:#9ca3af">Op Only</span>':''}</div>
         <div id="opq-${pid}"
-          onclick="openKP('${pname}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;_updateOpCard('${pid}',v);},${qty})"
+          onclick="openKP('${pname}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;_updateOpCard('${pid}',v);},${qty},false,true)"
           style="font-family:'DM Mono',monospace;font-size:40px;font-weight:500;text-align:center;line-height:1.2;
                  color:${qty>0?'#16a34a':'#9ca3af'};cursor:pointer;padding:12px 0;
                  background:${qty>0?'#f0fdf4':'#f9fafb'};border-radius:10px;
