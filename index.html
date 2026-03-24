@@ -2106,13 +2106,13 @@ function _renderOrdersInner(){
           const c=S.customers.find(x=>x.id===o.customerId)||{};
           const useAllItems=c.custType==='linen'||c.custType==='towel';
           const typeItems=(useAllItems?o.items:o.items.filter(it=>prodType(it.productId)===g.type)).slice().sort((a,b)=>_prodSortKey(a.productName)-_prodSortKey(b.productName));
-          const _lbItem=o.items.find(it=>/laundry bag/i.test(it.productName));
-          const _lbQty=_lbItem?.qty??0;
+          const _lbItems=o.items.filter(it=>/laundry bag/i.test(it.productName));
+          const _lbQty=_lbItems.reduce((s,it)=>s+(it.qty||0),0);
           return `<div class="order-row ${isDone?'done':''}">
             <div class="order-row-hdr" onclick="toggleOrderExpand('${o.id}-${g.type}')">
               <span class="order-row-num">${idx+1}</span>
               <span class="order-row-cust">${o.customerName}</span>
-              <span onclick="event.stopPropagation();openKP('LB \u00b7 ${o.customerName.replace(/'/g,"\\'")}','Laundry bag qty',(v)=>{_setLBQty('${o.id}',v)},${_lbQty})" style="display:inline-flex;align-items:center;padding:4px 13px;background:${_lbQty>0?'#f3e8ff':'#f3f4f6'};border:2px solid ${_lbQty>0?'#c084fc':'#d1d5db'};border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;color:${_lbQty>0?'#7e22ce':'#6b7280'};white-space:nowrap;margin-left:8px;flex-shrink:0;user-select:none;-webkit-tap-highlight-color:transparent;min-height:28px">LB&nbsp;${_lbQty}</span>
+              <span onclick="event.stopPropagation();_openLBPicker('${o.id}')" style="display:inline-flex;align-items:center;padding:4px 13px;background:${_lbQty>0?'#f3e8ff':'#f3f4f6'};border:2px solid ${_lbQty>0?'#c084fc':'#d1d5db'};border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;color:${_lbQty>0?'#7e22ce':'#6b7280'};white-space:nowrap;margin-left:8px;flex-shrink:0;user-select:none;-webkit-tap-highlight-color:transparent;min-height:28px">LB&nbsp;${_lbQty}</span>
               <span class="order-row-meta">${c.frequency||''}</span>
               <span class="badge ${o.status==='pending'?'bg-warn':o.status==='packed'?'bg-green':'bg-gray'}" style="margin-left:10px">${o.status.toUpperCase()}</span>
               ${o.note==='Fixed'?`<span style="font-size:11px;font-weight:700;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;margin-left:8px">📋 FIXED</span>`:''}
@@ -4913,28 +4913,80 @@ printLabels = async function(orderId) {
 const _PROD_SORT = ['laundry bag','tea towel','cleaning cloth','glass cloth','microfibre','napkin','table cloth','bath sheet','bath towel','hand towel','face washer','gym towel','nappy'];
 function _prodSortKey(name){ const n=(name||'').toLowerCase(); for(let i=0;i<_PROD_SORT.length;i++) if(n.includes(_PROD_SORT[i])) return i; return 999; }
 
-// LB (Laundry Bag) quick-edit — updates item qty, bagCount, and DB
-async function _setLBQty(orderId, qty) {
+// LB (Laundry Bag) quick-edit — set qty for a specific LB variant, recalc bagCount from all LB items
+async function _setLBVariantQty(orderId, productId, qty) {
   const o = S.orders.find(x=>x.id===orderId); if(!o) return;
-  let lbItem = o.items.find(it=>/laundry bag/i.test(it.productName));
-  if(!lbItem) {
-    if(qty <= 0){ return; }
-    // Find LB product assigned to this customer, else fall back to any LB in catalogue
-    const assigned = getCustProds(o.customerId);
-    const lbProd = [...assigned].map(pid=>S.products.find(x=>x.id===pid)).find(p=>p&&/laundry bag/i.test(p.name))
-                || S.products.find(p=>/laundry bag/i.test(p.name));
-    if(!lbProd){ _toast('⚠ No Laundry Bag product found',2500); return; }
-    lbItem = {id:uid(), productId:lbProd.id, productName:lbProd.name, catId:lbProd.catId, qty:0};
-    o.items.push(lbItem);
-    try { await _post('order_items',[{id:lbItem.id,order_id:orderId,product_id:lbProd.id,product_name:lbProd.name,cat_id:lbProd.catId,qty:0}]); } catch(e){}
+  let item = o.items.find(it=>it.productId===productId);
+  if(!item) {
+    if(qty <= 0) return;
+    const prod = S.products.find(x=>x.id===productId);
+    if(!prod) return;
+    item = {id:uid(), productId:prod.id, productName:prod.name, catId:prod.catId, qty:0};
+    o.items.push(item);
+    try { await _post('order_items',[{id:item.id,order_id:orderId,product_id:prod.id,product_name:prod.name,cat_id:prod.catId,qty:0}]); } catch(e){}
   }
-  lbItem.qty = qty;
-  o.bagCount = Math.max(1, qty);
+  item.qty = qty;
+  // bagCount = total of all LB variants combined
+  o.bagCount = Math.max(1, o.items.filter(it=>/laundry bag/i.test(it.productName)).reduce((s,it)=>s+(it.qty||0),0));
   try {
-    await _patch('order_items',{qty},'?order_id=eq.'+orderId+'&product_id=eq.'+lbItem.productId);
+    await _patch('order_items',{qty},'?order_id=eq.'+orderId+'&product_id=eq.'+productId);
     await _patch('orders',{bag_count:o.bagCount},'?id=eq.'+orderId);
-  } catch(e){ console.warn('setLBQty:',e); }
+  } catch(e){ console.warn('_setLBVariantQty:',e); }
   _renderOrdersInner();
+}
+
+// Open LB picker: single variant → keypad directly; multiple variants → bottom-sheet
+function _openLBPicker(orderId) {
+  const o = S.orders.find(x=>x.id===orderId); if(!o) return;
+
+  // Collect variants: LB items already in order + assigned LB products not yet in order
+  const assigned = getCustProds(o.customerId);
+  const lbInOrder = o.items.filter(it=>/laundry bag/i.test(it.productName));
+  const lbInOrderPids = new Set(lbInOrder.map(it=>it.productId));
+  const extraProds = S.products.filter(p=>/laundry bag/i.test(p.name) && assigned.has(p.id) && !lbInOrderPids.has(p.id));
+  let variants = [
+    ...lbInOrder.map(it=>({productId:it.productId, productName:it.productName, qty:it.qty})),
+    ...extraProds.map(p=>({productId:p.id, productName:p.name, qty:0}))
+  ];
+
+  // Fallback: any LB product in catalogue
+  if(!variants.length) {
+    const anyLB = S.products.find(p=>/laundry bag/i.test(p.name));
+    if(!anyLB){ _toast('⚠ No Laundry Bag product found',2500); return; }
+    variants = [{productId:anyLB.id, productName:anyLB.name, qty:0}];
+  }
+
+  // Single variant — open keypad directly
+  if(variants.length === 1) {
+    const v = variants[0];
+    openKP('LB \u00b7 '+o.customerName.replace(/'/g,"\\'"), v.productName, (qty)=>{ _setLBVariantQty(orderId, v.productId, qty); }, v.qty);
+    return;
+  }
+
+  // Multiple variants — bottom-sheet picker
+  let modal = document.getElementById('lb-picker-modal');
+  if(modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'lb-picker-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;padding:0';
+  modal.onclick = e=>{ if(e.target===modal) modal.remove(); };
+  const custSafe = o.customerName.replace(/'/g,"\\'").replace(/`/g,'\\`');
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px 20px 32px">
+      <div style="font-weight:700;font-size:16px;margin-bottom:2px">LB \u00b7 ${o.customerName}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Tap a variant to edit qty</div>
+      ${variants.map(v=>`
+        <div onclick="openKP('${v.productName.replace(/'/g,"\\'")}','Qty',(qty)=>{_setLBVariantQty('${orderId}','${v.productId}',qty);document.getElementById('lb-picker-modal')?.remove();},${v.qty})"
+          style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f9fafb;border-radius:12px;margin-bottom:8px;cursor:pointer;border:2px solid ${v.qty>0?'#c084fc':'#e5e7eb'};-webkit-tap-highlight-color:transparent">
+          <span style="font-size:14px;font-weight:600">${v.productName}</span>
+          <span style="font-size:22px;font-weight:800;color:${v.qty>0?'#7e22ce':'#9ca3af'}">${v.qty}</span>
+        </div>`).join('')}
+      <button onclick="document.getElementById('lb-picker-modal').remove()"
+        style="width:100%;margin-top:4px;padding:13px;border:none;background:#f3f4f6;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;color:#374151">
+        Cancel
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
 }
 
 // checkedItems DB sync (debounced) + live summary update
