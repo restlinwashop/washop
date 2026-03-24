@@ -1350,6 +1350,18 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
   </div>
 </div>
 
+<!-- ════ MOVE ORDERS DIALOG ════ -->
+<div class="modal-overlay" id="mod-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title" style="margin-bottom:14px">📅 Pending Orders Found</div>
+    <div id="mod-msg" style="font-size:14px;line-height:1.6;margin-bottom:20px;color:var(--text)"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="_modResolve(false)">Leave as is</button>
+      <button class="btn btn-primary" id="mod-move-btn" onclick="_modResolve(true)">Move orders</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ MANUAL ORDER MODAL ════ -->
 <div class="modal-overlay" id="mo-modal">
   <div class="modal modal-lg">
@@ -4543,10 +4555,35 @@ removeProd = async function(id) {
   }
 };
 
+// Move-orders dialog helper
+let _modResolve = null;
+function _showMoveOrdersDialog(msg, moveBtnLabel) {
+  return new Promise(resolve => {
+    document.getElementById('mod-msg').innerHTML = msg;
+    document.getElementById('mod-move-btn').textContent = moveBtnLabel;
+    document.getElementById('mod-modal').classList.add('open');
+    _modResolve = (val) => {
+      document.getElementById('mod-modal').classList.remove('open');
+      _modResolve = null;
+      resolve(val);
+    };
+  });
+}
+function _nearestDay(fromDateStr, targetAppDay) {
+  // targetAppDay: 1=Mon..6=Sat (matches JS getDay for Mon-Sat)
+  const d = new Date(fromDateStr + 'T12:00:00');
+  for(let i=1; i<=7; i++) {
+    const t = new Date(d); t.setDate(d.getDate()+i);
+    if(t.getDay() === targetAppDay) return t.toISOString().slice(0,10);
+  }
+  return fromDateStr;
+}
+
 // saveCCdetails
 const _origSaveCCdetails = saveCCdetails;
 saveCCdetails = async function() {
   const c = S.customers.find(x=>x.id===ccId); if (!c) return;
+  const oldDays = (c.deliveryDays && c.deliveryDays.length) ? [...c.deliveryDays] : [c.dueDay||4];
   const ccDays=[...document.querySelectorAll('.cc-day-cb:checked')].map(x=>parseInt(x.value));
   const newCustType = document.getElementById('cc-ctype')?.value || null;
   const newOverride = document.getElementById('cc-next-override')?.value || null;
@@ -4557,6 +4594,32 @@ saveCCdetails = async function() {
   if(upd.nextDeliveryOverride !== undefined) c.nextDeliveryOverride = upd.nextDeliveryOverride;   if(upd.custType) { await autoAssignBags(ccId); if(document.getElementById("cc-products").classList.contains("active")) renderCCprods(); }
   renderAdmin(); _toast('✓ Saved', 2000);
   document.getElementById('cc-hdr-name').textContent=c.name; document.getElementById('cc-hdr-meta').textContent=c.frequency+' · '+c.address;
+  // Check for pending orders on removed delivery days
+  const newDays = upd.deliveryDays;
+  const removedDays = oldDays.filter(d => !newDays.includes(d));
+  if(removedDays.length && newDays.length) {
+    const DAYS = ['','Mon','Tue','Wed','Thu','Fri','Sat'];
+    for(const oldDay of removedDays) {
+      const pendingOnDay = S.orders.filter(o =>
+        o.customerId === ccId &&
+        o.status === 'pending' &&
+        o.deliveryDate &&
+        new Date(o.deliveryDate + 'T12:00:00').getDay() === oldDay
+      );
+      if(!pendingOnDay.length) continue;
+      const targetDay = newDays[0];
+      const msg = `This customer has <strong>${pendingOnDay.length}</strong> pending order${pendingOnDay.length>1?'s':''} on <strong>${DAYS[oldDay]}</strong>.<br>Would you like to move them to <strong>${DAYS[targetDay]}</strong>?`;
+      const doMove = await _showMoveOrdersDialog(msg, `Move to ${DAYS[targetDay]}`);
+      if(doMove) {
+        for(const o of pendingOnDay) {
+          const newDate = _nearestDay(o.deliveryDate, targetDay);
+          try { await _patch('orders',{delivery_date:newDate},'?id=eq.'+o.id); o.deliveryDate=newDate; }
+          catch(e){ console.warn('move order date:',e); }
+        }
+        _toast(`✓ ${pendingOnDay.length} order${pendingOnDay.length>1?'s':''} moved to ${DAYS[targetDay]}`, 2500);
+      }
+    }
+  }
 };
 
 // saveCCdriver — multi-day version
