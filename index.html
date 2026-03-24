@@ -5383,7 +5383,7 @@ function renderOperation() {
     reqGrid.innerHTML = filteredReqKeys.map(pid => {
       const r = required[pid];
       const sent = _opSentTotal(pid, date);
-      const used = _opUsedTotal(pid, date);
+      const used = _opUsedTotal(pid, prepDates);
       const f2stock = sent - used; // F2 physical: sent minus delivered
       const remaining = Math.max(0, r.qty - sent);
       const pct = r.qty > 0 ? Math.min(100, Math.round(sent/r.qty*100)) : 0;
@@ -5497,7 +5497,7 @@ function renderOperation() {
   entryGrid.innerHTML = entryHtml;
 
   // ── F2 Stock ──
-  renderF2Stock(date);
+  renderF2Stock(date, prepDates);
 
   // ── Transfer log ──
   renderOpLog(date);
@@ -5569,39 +5569,41 @@ function _opSentTracked(productId, date) {
   return _opSentTotal(productId, date);
 }
 
-function _opUsedTotal(productId, date) {
+function _opUsedTotal(productId, dates) {
   // F2 stock = Sent from F1 MINUS delivered orders
   // Packed orders are still physically in F2 — don't deduct them
   // Delivered orders have left F2 — deduct those
+  const dateArr = Array.isArray(dates) ? dates : [dates];
   return S.orders
-    .filter(o => o.deliveryDate === date && o.status === 'delivered')
+    .filter(o => dateArr.includes(o.deliveryDate) && o.status === 'delivered')
     .reduce((sum, o) => {
       const it = o.items.find(x => x.productId === productId);
       return sum + (it ? it.qty : 0);
     }, 0);
 }
 
-function renderF2Stock(date) {
+function renderF2Stock(date, prepDates) {
   const el = document.getElementById('op-f2-stock');
   if(!el) return;
-  
-  // Get all products that have any transfers OR orders for this date
+  const dateArr = Array.isArray(prepDates) ? prepDates : [prepDates || date];
+
+  // Get all products that have any transfers (today) OR orders (target prep dates)
   // Only show tracked products in F2 stock
   const productIds = new Set();
   (S.opTransfers||[]).filter(t => t.date === date).forEach(t => {
     const p = S.products.find(x => x.id === t.productId);
     if(p && p.trackStock !== false) productIds.add(t.productId);
   });
-  S.orders.filter(o => o.deliveryDate === date).forEach(o => o.items.forEach(it => productIds.add(it.productId)));
-  
+  S.orders.filter(o => dateArr.includes(o.deliveryDate)).forEach(o => o.items.forEach(it => productIds.add(it.productId)));
+
   if(!productIds.size) { el.innerHTML = '<div style="color:var(--muted);font-size:13px">No data for this date</div>'; return; }
-  
+
   const rows = [...productIds].map(pid => {
     const p = S.products.find(x => x.id === pid);
     const sent = _opSentTotal(pid, date);
-    const used = _opUsedTotal(pid, date);
+    const used = _opUsedTotal(pid, dateArr);
     const available = sent - used;
-    const required = S.orders.filter(o => o.deliveryDate === date)
+    const required = S.orders.filter(o => dateArr.includes(o.deliveryDate))
       .reduce((s,o) => s + (o.items.find(it=>it.productId===pid)?.qty||0), 0);
     return {name: p?.name||pid, sent, used, available, required};
   }).sort((a,b) => a.name.localeCompare(b.name));
