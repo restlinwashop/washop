@@ -266,6 +266,14 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
 .dash-tile-bar { height:4px;border-radius:2px;margin-top:10px;background:#e5e7eb;overflow:hidden; }
 .dash-tile-bar-fill { height:100%;border-radius:2px;transition:width .5s; }
 
+/* ── DELIVERY ROUTES ── */
+.route-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:grab;user-select:none;transition:box-shadow .15s,background .15s;touch-action:none;}
+.route-item.route-drag-over{border-color:var(--accent2);background:#eff6ff;box-shadow:0 0 0 2px rgba(2,132,199,.2);}
+.route-handle{color:var(--muted);font-size:18px;padding:0 4px;}
+.route-num{font-family:'DM Mono',monospace;font-weight:700;font-size:15px;color:var(--accent2);min-width:26px;text-align:center;}
+.route-name{font-weight:600;flex:1;}
+.route-addr{font-size:12px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
 </style>
 </head>
 <body>
@@ -667,6 +675,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <div class="admin-tab" onclick="showAdminTab('products',this)">Products</div>
       <div class="admin-tab" onclick="showAdminTab('frequencies',this)">Frequencies</div>
       <div class="admin-tab" onclick="showAdminTab('archive',this)">🗄 Archive</div>
+      <div class="admin-tab" onclick="showAdminTab('routes',this)">🗺 Routes</div>
     </div>
 
     <!-- CUSTOMERS -->
@@ -801,6 +810,71 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
         </div>
       </div>
       <div id="categories-list"></div>
+    </div>
+
+    <!-- ROUTES -->
+    <div class="admin-section" id="admin-routes">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+        <!-- Delivery Route -->
+        <div>
+          <div class="add-form" style="margin-bottom:14px">
+            <div class="section-title">🚚 Delivery Route</div>
+            <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Order customers are delivered to. Used in Driver App.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field" style="min-width:130px;margin-bottom:0">
+                <label>Driver</label>
+                <select id="route-driver" onchange="renderRoutes()">
+                  <option value="">Select...</option>
+                </select>
+              </div>
+              <div class="field" style="min-width:110px;margin-bottom:0">
+                <label>Day</label>
+                <select id="route-day" onchange="renderRoutes()">
+                  <option value="">Select...</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="route-list"><div class="empty">Select driver &amp; day.</div></div>
+        </div>
+
+        <!-- Packing Order -->
+        <div>
+          <div class="add-form" style="margin-bottom:14px">
+            <div class="section-title">📦 Packing Order</div>
+            <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Order customers are packed in. Used in Order/Pack list.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field" style="min-width:130px;margin-bottom:0">
+                <label>Driver</label>
+                <select id="pack-driver" onchange="renderPackOrder()">
+                  <option value="">Select...</option>
+                </select>
+              </div>
+              <div class="field" style="min-width:110px;margin-bottom:0">
+                <label>Day</label>
+                <select id="pack-day" onchange="renderPackOrder()">
+                  <option value="">Select...</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="pack-list"><div class="empty">Select driver &amp; day.</div></div>
+        </div>
+
+      </div>
     </div>
 
     <!-- PRODUCTS -->
@@ -1931,8 +2005,8 @@ function _renderOrdersInner(){
         // No custType — fall back to item product types
         return o.items.some(it=>prodType(it.productId)===type);
       }).sort((a,b)=>{
-        const ra=getOrderDriver(a.customerId,a.deliveryDate)?.routeOrder||a.routeOrder||99;
-        const rb=getOrderDriver(b.customerId,b.deliveryDate)?.routeOrder||b.routeOrder||99;
+        const ra=getOrderDriver(a.customerId,a.deliveryDate)?.packOrder??99;
+        const rb=getOrderDriver(b.customerId,b.deliveryDate)?.packOrder??99;
         return ra-rb;
       });
       if(orders.length)groups.push({driverId:did,driverName:drv?drv.name:'Unassigned',vehicle:drv?.vehicle||'',type,orders});
@@ -1970,7 +2044,7 @@ function _renderOrdersInner(){
           const typeItems=useAllItems?o.items:o.items.filter(it=>prodType(it.productId)===g.type);
           return `<div class="order-row ${isDone?'done':''}">
             <div class="order-row-hdr" onclick="toggleOrderExpand('${o.id}-${g.type}')">
-              <span class="order-row-num">${o.routeOrder||idx+1}</span>
+              <span class="order-row-num">${idx+1}</span>
               <span class="order-row-cust">${o.customerName}</span>
               <span class="order-row-meta">${c.frequency||''}</span>
               <span class="badge ${o.status==='pending'?'bg-warn':o.status==='packed'?'bg-green':'bg-gray'}" style="margin-left:10px">${o.status.toUpperCase()}</span>
@@ -3225,6 +3299,7 @@ function showAdminTab(id,el){
   document.querySelectorAll('.admin-section').forEach(s=>s.classList.remove('active'));
   el.classList.add('active');document.getElementById('admin-'+id).classList.add('active');renderAdmin();
   if(id==='archive') checkArchiveStatus();
+  if(id==='routes'){ renderRoutes(); renderPackOrder(); }
 }
 function renderAdmin(){
   // Populate driver filter
@@ -4307,9 +4382,9 @@ function getOrderDriver(custId, deliveryDate) {
   if(c.dayDrivers && c.dayDrivers.length) {
     const wd = new Date(deliveryDate+'T00:00:00').getDay();
     const match = c.dayDrivers.find(dd => dd.day === wd);
-    if(match) return {driverId: match.driverId, routeOrder: match.routeOrder};
+    if(match) return {driverId: match.driverId, routeOrder: match.routeOrder, packOrder: match.packOrder??99};
   }
-  return {driverId: c.driverId, routeOrder: c.routeOrder||99};
+  return {driverId: c.driverId, routeOrder: c.routeOrder||99, packOrder: 99};
 }
 
 // saveCCstock
@@ -6362,6 +6437,245 @@ ensureDeliveryDaysColumn();
 
   connect();
 })();
+
+// ─── DELIVERY ROUTES ────────────────────────────────────────────────────────
+function renderRoutes(){
+  const sel=document.getElementById('route-driver');
+  const dayEl=document.getElementById('route-day');
+  if(!sel||!dayEl) return;
+  const curDid=sel.value;
+  sel.innerHTML='<option value="">Select driver...</option>'+
+    S.drivers.map(d=>`<option value="${d.id}"${d.id===curDid?' selected':''}>${d.name}</option>`).join('');
+  const did=sel.value,day=parseInt(dayEl.value)||0;
+  const list=document.getElementById('route-list');
+  const DAYS=['','Mon','Tue','Wed','Thu','Fri','Sat'];
+  if(!did||!day){list.innerHTML='<div class="empty">Select a driver and day above to view route.</div>';return;}
+  let custs=S.customers.filter(c=>{
+    if(!c.active) return false;
+    if(c.dayDrivers?.length) return c.dayDrivers.some(dd=>dd.day===day&&dd.driverId===did);
+    const days=c.deliveryDays?.length?c.deliveryDays:[c.dueDay||4];
+    return c.driverId===did&&days.includes(day);
+  });
+  custs.sort((a,b)=>{
+    const ra=a.dayDrivers?.find(dd=>dd.day===day)?.routeOrder??a.routeOrder??99;
+    const rb=b.dayDrivers?.find(dd=>dd.day===day)?.routeOrder??b.routeOrder??99;
+    return ra-rb;
+  });
+  const drv=S.drivers.find(d=>d.id===did);
+  if(!custs.length){
+    list.innerHTML=`<div class="empty">No customers assigned to ${drv?.name||'driver'} on ${DAYS[day]||'this day'}.<br><small style="color:var(--muted)">Assign customers via Customers tab → open customer → Driver section.</small></div>`;
+    return;
+  }
+  list.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--surface2);border-radius:8px">${drv?.name||'Driver'} · ${DAYS[day]} · ${custs.length} stop${custs.length!==1?'s':''} &nbsp;·&nbsp; <strong style="color:var(--accent)">Drag to reorder · Auto-saves</strong></div>`+
+    custs.map((c,i)=>`<div class="route-item" draggable="true" data-cid="${c.id}"><span class="route-handle">☰</span><span class="route-num">${i+1}</span><span class="route-name">${c.name}</span><span class="route-addr">${c.address||''}</span></div>`).join('');
+  list.querySelectorAll('.route-item').forEach(el=>{
+    el.addEventListener('dragstart',_rdragStart);
+    el.addEventListener('dragover',_rdragOver);
+    el.addEventListener('drop',_rdragDrop);
+    el.addEventListener('dragend',_rdragEnd);
+    el.addEventListener('touchstart',_rtouchStart,{passive:false});
+    el.addEventListener('touchmove',_rtouchMove,{passive:false});
+    el.addEventListener('touchend',_rtouchEnd,{passive:false});
+  });
+}
+
+// Desktop drag-and-drop
+let _rdragSrc=null;
+function _rdragStart(e){_rdragSrc=e.currentTarget;e.dataTransfer.effectAllowed='move';setTimeout(()=>{if(_rdragSrc)_rdragSrc.style.opacity='0.4';},0);}
+function _rdragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';document.querySelectorAll('#route-list .route-item').forEach(el=>el.classList.remove('route-drag-over'));if(e.currentTarget!==_rdragSrc)e.currentTarget.classList.add('route-drag-over');}
+function _rdragDrop(e){
+  e.preventDefault();
+  if(!_rdragSrc||_rdragSrc===e.currentTarget) return;
+  const items=[..._rdragSrc.parentNode.querySelectorAll('.route-item')];
+  const si=items.indexOf(_rdragSrc),di=items.indexOf(e.currentTarget);
+  if(si<di) e.currentTarget.after(_rdragSrc); else e.currentTarget.before(_rdragSrc);
+  _rdragSrc.parentNode.querySelectorAll('.route-item').forEach((el,i)=>el.querySelector('.route-num').textContent=i+1);
+  _routeSave();
+}
+function _rdragEnd(){document.querySelectorAll('#route-list .route-item').forEach(el=>{el.classList.remove('route-drag-over');el.style.opacity='';});_rdragSrc=null;}
+
+// Touch drag-and-drop
+let _rtEl=null,_rtClone=null,_rtStartY=0,_rtOrigTop=0,_rtOrigLeft=0,_rtOrigW=0,_rtLast=null;
+function _rtouchStart(e){
+  e.preventDefault();
+  _rtEl=e.currentTarget;
+  const r=_rtEl.getBoundingClientRect();
+  _rtStartY=e.touches[0].clientY;_rtOrigTop=r.top;_rtOrigLeft=r.left;_rtOrigW=r.width;_rtLast=null;
+  _rtClone=_rtEl.cloneNode(true);
+  Object.assign(_rtClone.style,{position:'fixed',zIndex:'9999',width:_rtOrigW+'px',left:_rtOrigLeft+'px',top:_rtOrigTop+'px',opacity:'0.85',pointerEvents:'none',background:'#fff',border:'2px solid var(--accent2)',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,.2)',margin:'0'});
+  document.body.appendChild(_rtClone);
+  _rtEl.style.opacity='0.3';
+}
+function _rtouchMove(e){
+  e.preventDefault();
+  if(!_rtEl||!_rtClone) return;
+  const dy=e.touches[0].clientY-_rtStartY;
+  _rtClone.style.top=(_rtOrigTop+dy)+'px';
+  document.querySelectorAll('#route-list .route-item').forEach(el=>el.classList.remove('route-drag-over'));
+  const y=e.touches[0].clientY;
+  _rtLast=[...document.querySelectorAll('#route-list .route-item')].find(item=>{
+    if(item===_rtEl) return false;
+    const r=item.getBoundingClientRect();
+    return y>=r.top&&y<=r.bottom;
+  })||null;
+  if(_rtLast) _rtLast.classList.add('route-drag-over');
+}
+function _rtouchEnd(e){
+  e.preventDefault();
+  if(_rtClone){_rtClone.remove();_rtClone=null;}
+  document.querySelectorAll('#route-list .route-item').forEach(el=>{el.classList.remove('route-drag-over');el.style.opacity='';});
+  if(_rtEl&&_rtLast){
+    const items=[..._rtEl.parentNode.querySelectorAll('.route-item')];
+    const si=items.indexOf(_rtEl),di=items.indexOf(_rtLast);
+    if(si<di) _rtLast.after(_rtEl); else _rtLast.before(_rtEl);
+    _rtEl.parentNode.querySelectorAll('.route-item').forEach((el,i)=>el.querySelector('.route-num').textContent=i+1);
+    _routeSave();
+  }
+  _rtEl=null;_rtLast=null;
+}
+
+function _routeSave(){
+  const did=document.getElementById('route-driver')?.value;
+  const day=parseInt(document.getElementById('route-day')?.value)||0;
+  if(!did||!day) return;
+  const ids=[...document.querySelectorAll('#route-list .route-item')].map(el=>el.dataset.cid);
+  saveRouteOrder(did,day,ids);
+}
+
+// ─── PACKING ORDER ──────────────────────────────────────────────────────────
+function renderPackOrder(){
+  const sel=document.getElementById('pack-driver');
+  const dayEl=document.getElementById('pack-day');
+  if(!sel||!dayEl) return;
+  const curDid=sel.value;
+  sel.innerHTML='<option value="">Select...</option>'+
+    S.drivers.map(d=>`<option value="${d.id}"${d.id===curDid?' selected':''}>${d.name}</option>`).join('');
+  const did=sel.value,day=parseInt(dayEl.value)||0;
+  const list=document.getElementById('pack-list');
+  const DAYS=['','Mon','Tue','Wed','Thu','Fri','Sat'];
+  if(!did||!day){list.innerHTML='<div class="empty">Select driver &amp; day.</div>';return;}
+  let custs=S.customers.filter(c=>{
+    if(!c.active) return false;
+    if(c.dayDrivers?.length) return c.dayDrivers.some(dd=>dd.day===day&&dd.driverId===did);
+    const days=c.deliveryDays?.length?c.deliveryDays:[c.dueDay||4];
+    return c.driverId===did&&days.includes(day);
+  });
+  custs.sort((a,b)=>{
+    const ra=a.dayDrivers?.find(dd=>dd.day===day)?.packOrder??99;
+    const rb=b.dayDrivers?.find(dd=>dd.day===day)?.packOrder??99;
+    return ra-rb;
+  });
+  const drv=S.drivers.find(d=>d.id===did);
+  if(!custs.length){
+    list.innerHTML=`<div class="empty">No customers for ${drv?.name||'driver'} on ${DAYS[day]||'this day'}.</div>`;
+    return;
+  }
+  list.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--surface2);border-radius:8px">${drv?.name||'Driver'} · ${DAYS[day]} · ${custs.length} stop${custs.length!==1?'s':''} &nbsp;·&nbsp; <strong style="color:var(--accent)">Drag to reorder · Auto-saves</strong></div>`+
+    custs.map((c,i)=>`<div class="route-item" draggable="true" data-cid="${c.id}"><span class="route-handle">☰</span><span class="route-num">${i+1}</span><span class="route-name">${c.name}</span><span class="route-addr">${c.address||''}</span></div>`).join('');
+  list.querySelectorAll('.route-item').forEach(el=>{
+    el.addEventListener('dragstart',_pdragStart);
+    el.addEventListener('dragover',_pdragOver);
+    el.addEventListener('drop',_pdragDrop);
+    el.addEventListener('dragend',_pdragEnd);
+    el.addEventListener('touchstart',_ptouchStart,{passive:false});
+    el.addEventListener('touchmove',_ptouchMove,{passive:false});
+    el.addEventListener('touchend',_ptouchEnd,{passive:false});
+  });
+}
+
+let _pdragSrc=null;
+function _pdragStart(e){_pdragSrc=e.currentTarget;e.dataTransfer.effectAllowed='move';setTimeout(()=>{if(_pdragSrc)_pdragSrc.style.opacity='0.4';},0);}
+function _pdragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';document.querySelectorAll('#pack-list .route-item').forEach(el=>el.classList.remove('route-drag-over'));if(e.currentTarget!==_pdragSrc)e.currentTarget.classList.add('route-drag-over');}
+function _pdragDrop(e){
+  e.preventDefault();
+  if(!_pdragSrc||_pdragSrc===e.currentTarget) return;
+  const items=[..._pdragSrc.parentNode.querySelectorAll('.route-item')];
+  const si=items.indexOf(_pdragSrc),di=items.indexOf(e.currentTarget);
+  if(si<di) e.currentTarget.after(_pdragSrc); else e.currentTarget.before(_pdragSrc);
+  _pdragSrc.parentNode.querySelectorAll('.route-item').forEach((el,i)=>el.querySelector('.route-num').textContent=i+1);
+  _packSave();
+}
+function _pdragEnd(){document.querySelectorAll('#pack-list .route-item').forEach(el=>{el.classList.remove('route-drag-over');el.style.opacity='';});_pdragSrc=null;}
+
+let _ptEl=null,_ptClone=null,_ptStartY=0,_ptOrigTop=0,_ptOrigLeft=0,_ptOrigW=0,_ptLast=null;
+function _ptouchStart(e){
+  e.preventDefault();
+  _ptEl=e.currentTarget;
+  const r=_ptEl.getBoundingClientRect();
+  _ptStartY=e.touches[0].clientY;_ptOrigTop=r.top;_ptOrigLeft=r.left;_ptOrigW=r.width;_ptLast=null;
+  _ptClone=_ptEl.cloneNode(true);
+  Object.assign(_ptClone.style,{position:'fixed',zIndex:'9999',width:_ptOrigW+'px',left:_ptOrigLeft+'px',top:_ptOrigTop+'px',opacity:'0.85',pointerEvents:'none',background:'#fff',border:'2px solid var(--accent2)',borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,.2)',margin:'0'});
+  document.body.appendChild(_ptClone);
+  _ptEl.style.opacity='0.3';
+}
+function _ptouchMove(e){
+  e.preventDefault();
+  if(!_ptEl||!_ptClone) return;
+  const dy=e.touches[0].clientY-_ptStartY;
+  _ptClone.style.top=(_ptOrigTop+dy)+'px';
+  document.querySelectorAll('#pack-list .route-item').forEach(el=>el.classList.remove('route-drag-over'));
+  const y=e.touches[0].clientY;
+  _ptLast=[...document.querySelectorAll('#pack-list .route-item')].find(item=>{
+    if(item===_ptEl) return false;
+    const r=item.getBoundingClientRect();
+    return y>=r.top&&y<=r.bottom;
+  })||null;
+  if(_ptLast) _ptLast.classList.add('route-drag-over');
+}
+function _ptouchEnd(e){
+  e.preventDefault();
+  if(_ptClone){_ptClone.remove();_ptClone=null;}
+  document.querySelectorAll('#pack-list .route-item').forEach(el=>{el.classList.remove('route-drag-over');el.style.opacity='';});
+  if(_ptEl&&_ptLast){
+    const items=[..._ptEl.parentNode.querySelectorAll('.route-item')];
+    const si=items.indexOf(_ptEl),di=items.indexOf(_ptLast);
+    if(si<di) _ptLast.after(_ptEl); else _ptLast.before(_ptEl);
+    _ptEl.parentNode.querySelectorAll('.route-item').forEach((el,i)=>el.querySelector('.route-num').textContent=i+1);
+    _packSave();
+  }
+  _ptEl=null;_ptLast=null;
+}
+
+function _packSave(){
+  const did=document.getElementById('pack-driver')?.value;
+  const day=parseInt(document.getElementById('pack-day')?.value)||0;
+  if(!did||!day) return;
+  const ids=[...document.querySelectorAll('#pack-list .route-item')].map(el=>el.dataset.cid);
+  savePackOrder(did,day,ids);
+}
+
+async function savePackOrder(driverId,day,orderedIds){
+  const ops=[];
+  orderedIds.forEach((cid,i)=>{
+    const c=S.customers.find(x=>x.id===cid);
+    if(!c) return;
+    const dd=c.dayDrivers?c.dayDrivers.map(x=>({...x})):[{day,driverId,routeOrder:99,packOrder:i+1}];
+    const idx=dd.findIndex(x=>x.day===day);
+    if(idx>=0) dd[idx]={...dd[idx],packOrder:i+1};
+    else dd.push({day,driverId,routeOrder:99,packOrder:i+1});
+    c.dayDrivers=dd;
+    ops.push(_patch('customers',{day_drivers:JSON.stringify(dd)},'?id=eq.'+cid).catch(e=>console.warn('pack save:',e)));
+  });
+  await Promise.all(ops);
+  _toast('✓ Packing order saved',1500);
+}
+
+async function saveRouteOrder(driverId,day,orderedIds){
+  const ops=[];
+  orderedIds.forEach((cid,i)=>{
+    const c=S.customers.find(x=>x.id===cid);
+    if(!c) return;
+    const dd=c.dayDrivers?c.dayDrivers.map(x=>({...x})):[{day,driverId,routeOrder:i+1}];
+    const idx=dd.findIndex(x=>x.day===day);
+    if(idx>=0) dd[idx]={...dd[idx],routeOrder:i+1};
+    else dd.push({day,driverId,routeOrder:i+1});
+    c.dayDrivers=dd;
+    if(c.driverId===driverId) c.routeOrder=i+1;
+    ops.push(_patch('customers',{day_drivers:JSON.stringify(dd)},'?id=eq.'+cid).catch(e=>console.warn('route save:',e)));
+  });
+  await Promise.all(ops);
+  _toast('✓ Route saved',1500);
+}
 
 </script>
 </body>
