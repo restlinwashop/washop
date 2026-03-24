@@ -2246,7 +2246,7 @@ function openEO(id){
     _renderEOItems(o);
   }).catch(()=>_renderEOItems(o));
 }
-function adjEO(pid,d){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(!it)return;it.qty=Math.max(0,it.qty+d);const el=document.getElementById('eoq-'+pid);if(el)el.textContent=it.qty;}
+function adjEO(pid,d){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(!it)return;it.qty=Math.max(0,it.qty+d);const el=document.getElementById('eoq-'+pid);if(el)el.textContent=it.qty;window._eoUnsavedItems=o.items.map(x=>({...x}));}
 function setEOqty(pid,v){const o=S.orders.find(x=>x.id===eoId);if(!o)return;const it=o.items.find(x=>x.productId===pid);if(it)it.qty=v;const el=document.getElementById('eoq-'+pid);if(el)el.textContent=v;window._eoUnsavedItems=o.items.map(x=>({...x}));}
 async function removeEOitem(pid){
   const o=S.orders.find(x=>x.id===eoId); if(!o) return;
@@ -2265,15 +2265,20 @@ async function addEOitem(pid,pname,catId){
   const o=S.orders.find(x=>x.id===eoId); if(!o) return;
   if(o.items.some(x=>x.productId===pid)) return;
   openKP(pname,'Enter quantity', async (v)=>{
-    if(v<=0){ openEO(eoId); return; }
+    if(v<=0){ _renderEOItems(o); return; }
+    // Push to local state FIRST — guard blocks any re-tap while _post is in-flight
+    o.items.push({productId:pid,productName:pname,catId:catId||'',qty:v});
+    // Keep snapshot current so _freshOrders restores correctly (don't call openEO — it wipes _eoUnsavedItems)
+    window._eoUnsavedItems=o.items.map(x=>({...x}));
+    _renderEOItems(o);
     try {
-      // Write to DB first, wait for it
       await _post('order_items',[{id:uid(),order_id:eoId,product_id:pid,product_name:pname,cat_id:catId||'',qty:v}]);
-      // Add to local state
-      o.items.push({productId:pid,productName:pname,catId:catId||'',qty:v});
-      _toast('✓ Added — tap Save Changes to confirm',2500);
-      openEO(eoId);
+      _toast('✓ Added',2000);
     } catch(e){
+      // Rollback local state on DB failure
+      o.items=o.items.filter(x=>x.productId!==pid);
+      window._eoUnsavedItems=o.items.map(x=>({...x}));
+      _renderEOItems(o);
       _toast('⚠ Failed: '+e.message.slice(0,50),3000);
     }
   },0);
