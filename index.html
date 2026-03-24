@@ -1020,7 +1020,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:0">Today (F1 working date):</label>
-        <input type="date" id="op-date" onchange="renderOperation()" style="width:160px">
+        <input type="date" id="op-date" onchange="opQtys={};renderOperation()" style="width:160px">
         <button class="btn btn-sm btn-secondary" onclick="renderOperation()">↻ Refresh</button>
       </div>
     </div>
@@ -1032,48 +1032,46 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <button id="opf-towel" onclick="setOpFilter('towel')" style="padding:6px 18px;border-radius:20px;border:1px solid var(--border);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">Towel</button>
     </div>
 
-    <!-- Summary bar: what's needed today -->
-    <div class="card" style="margin-bottom:18px">
-      <div class="card-header">
-        <div class="card-title">Required — <span id="op-date-label" style="color:var(--accent2)">—</span> pending orders</div>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">Tomorrow + day after · pending only</span>
-      </div>
-      <div class="card-body" id="op-required-grid" style="display:flex;flex-wrap:wrap;gap:10px">
-        <div style="font-size:13px;color:var(--muted)">Select a date above</div>
+    <!-- F1 / F2 aligned product table -->
+    <div class="card" style="margin-bottom:14px;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:640px;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr>
+              <th rowspan="2" style="padding:10px 14px;text-align:left;border-right:2px solid var(--border);background:#fff;font-size:12px;font-weight:700;vertical-align:bottom">
+                Product
+                <div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px">Need for <span id="op-date-label" style="color:var(--accent2);font-weight:600">—</span></div>
+              </th>
+              <th colspan="2" style="background:#fef3c7;color:#92400e;text-align:center;padding:8px 4px;font-size:12px;font-weight:800;border-right:2px solid #fde68a;border-bottom:2px solid #fde68a">🏭 Factory 1</th>
+              <th colspan="3" style="background:#dbeafe;color:#1d4ed8;text-align:center;padding:8px 4px;font-size:12px;font-weight:800;border-bottom:2px solid #bfdbfe">📦 Factory 2</th>
+            </tr>
+            <tr>
+              <th style="background:#fef9c3;color:#92400e;text-align:center;padding:6px 10px;font-size:11px;font-weight:700;border-right:1px solid #fde68a">Received</th>
+              <th style="background:#fef9c3;color:#92400e;text-align:center;padding:6px 10px;font-size:11px;font-weight:700;border-right:2px solid #fde68a">→ F2 (tap)</th>
+              <th style="background:#eff6ff;color:#1d4ed8;text-align:center;padding:6px 10px;font-size:11px;font-weight:700;border-right:1px solid #bfdbfe">Total In</th>
+              <th style="background:#eff6ff;color:#1d4ed8;text-align:center;padding:6px 10px;font-size:11px;font-weight:700;border-right:1px solid #bfdbfe">Packed</th>
+              <th style="background:#eff6ff;color:#1d4ed8;text-align:center;padding:6px 10px;font-size:11px;font-weight:700">Remaining</th>
+            </tr>
+          </thead>
+          <tbody id="op-product-tbody">
+            <tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted)">Select a date above</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Production output entry -->
-    <div class="card" style="margin-bottom:18px">
-      <div class="card-header">
-        <div class="card-title">📦 Send to Factory 2</div>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">Enter quantities being transferred now</span>
-      </div>
-      <div class="card-body">
-        <div id="op-entry-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px">
-          <div style="color:var(--muted);font-size:13px">Select a date to load products</div>
-        </div>
-        <div style="display:flex;gap:10px;justify-content:flex-end">
-          <button class="btn btn-secondary" onclick="resetOpQtys()">Reset</button>
-          <button class="btn btn-primary" onclick="saveOpTransfer()">📤 Send to Factory 2</button>
-        </div>
-      </div>
+    <!-- Save transfer -->
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-bottom:18px">
+      <button class="btn btn-secondary" onclick="resetOpQtys()">↺ Reset</button>
+      <button class="btn btn-primary" onclick="saveOpTransfer()">📤 Save Transfer to F2</button>
     </div>
 
-    <!-- Running totals -->
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-header"><div class="card-title">Factory 2 Stock (Available)</div><span style="font-size:11px;color:var(--muted);margin-left:auto">Sent − Used in Orders</span></div>
-        <div class="card-body" id="op-f2-stock">
-          <div style="color:var(--muted);font-size:13px">Loading...</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div class="card-title">Transfer Log</div></div>
-        <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
-          <table><thead><tr><th>Time</th><th>Date</th><th>Product</th><th>Qty Sent</th><th></th></tr></thead>
-          <tbody id="op-log-tbody"><tr><td colspan="5" class="empty">No transfers yet</td></tr></tbody></table>
-        </div>
+    <!-- Transfer log -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Transfer Log</div></div>
+      <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
+        <table><thead><tr><th>Time</th><th>Date</th><th>Product</th><th>Qty Sent</th><th></th></tr></thead>
+        <tbody id="op-log-tbody"><tr><td colspan="5" class="empty">No transfers yet</td></tr></tbody></table>
       </div>
     </div>
   </div>
@@ -5319,22 +5317,21 @@ function setOpFilter(f) {
 }
 
 function initOperation() {
-  // Set default date to today (skip weekends → Monday)
   const _td = todayStr();
   const _dow = new Date(_td+'T00:00:00').getDay();
   const opDefault = _dow === 6 ? addDays(_td,2) : _dow === 0 ? addDays(_td,1) : _td;
   const el = document.getElementById('op-date');
   if(el && !el.value) el.value = opDefault;
-  // Init S.opTransfers if not loaded
   if(!S.opTransfers) S.opTransfers = [];
+  opQtys = {}; // reset pending quantities when entering page
   renderOperation();
 }
 
 function renderOperation() {
   const date = document.getElementById('op-date')?.value || todayStr();
-  opQtys = {};
+  // opQtys is NOT reset here — only reset on date change (onchange) or after save
 
-  // Restore active filter button state
+  // Restore filter button state
   ['all','linen','towel'].forEach(k => {
     const btn = document.getElementById('opf-'+k);
     if(!btn) return;
@@ -5344,176 +5341,90 @@ function renderOperation() {
     btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
   });
 
-  // ── Target dates: 1 day ahead normally; Friday → Saturday + Monday ──
-  // Operation runs Mon-Fri only. On Friday, prepare for both Sat and Mon deliveries.
+  // Target dates: 1 day ahead; Friday → Sat + Mon
   const _opDow = new Date(date+'T00:00:00').getDay();
   let prepDates;
-  if (_opDow === 5) { // Friday
-    prepDates = [addDays(date, 1), addDays(date, 3)]; // Saturday + Monday
+  if (_opDow === 5) {
+    prepDates = [addDays(date, 1), addDays(date, 3)];
     document.getElementById('op-date-label').textContent = fmtD(addDays(date,1)) + ' + ' + fmtD(addDays(date,3));
   } else {
     prepDates = [addDays(date, 1)];
     document.getElementById('op-date-label').textContent = fmtD(addDays(date, 1));
   }
 
-  // ── Required: pending orders for preparation target dates ──
-  const targetOrders = S.orders.filter(o =>
-    prepDates.includes(o.deliveryDate) && o.status === 'pending'
-  );
-
+  // Required: pending orders for tomorrow (what F1 needs to prepare)
   const required = {};
-  targetOrders.forEach(o => {
+  S.orders.filter(o => prepDates.includes(o.deliveryDate) && o.status === 'pending').forEach(o => {
     o.items.forEach(it => {
-      if(!required[it.productId]) required[it.productId] = {name: it.productName, qty: 0, catId: it.catId};
-      required[it.productId].qty += it.qty;
+      if(!required[it.productId]) required[it.productId] = 0;
+      required[it.productId] += it.qty;
     });
   });
 
-  // Render required grid
-  const reqGrid = document.getElementById('op-required-grid');
-  const reqKeys = Object.keys(required);
-  const filteredReqKeys = reqKeys.filter(pid => {
+  // Product list — filtered and sorted
+  const prods = S.products.filter(p => {
     if(opFilter === 'all') return true;
-    const cat = S.categories.find(c => c.id === required[pid].catId);
+    const cat = S.categories.find(c => c.id === p.catId);
     const ct = cat?.type || 'linen';
     return opFilter === 'towel' ? ct === 'towel' : ct !== 'towel';
-  }).sort((a,b)=>_prodSortKey(required[a].name)-_prodSortKey(required[b].name));
-  if(filteredReqKeys.length) {
-    reqGrid.innerHTML = filteredReqKeys.map(pid => {
-      const r = required[pid];
-      const sent = _opSentTotal(pid, date);
-      const used = _opUsedTotal(pid, date);
-      const f2stock = sent - used; // F2 physical: sent minus delivered
-      const remaining = Math.max(0, r.qty - sent);
-      const pct = r.qty > 0 ? Math.min(100, Math.round(sent/r.qty*100)) : 0;
-      const isDone = pct >= 100;
-      const cat = S.categories.find(c => c.id === r.catId);
-      const catType = cat?.type || 'linen';
-      const statusColor = isDone ? '#15803d' : sent > 0 ? '#92400e' : '#6b7280';
-      return `<div onclick="openKP('${r.name}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;},${opQtys[pid]||0},false,true)"
-        style="background:#fff;border:2px solid ${isDone?'#86efac':sent>0?'#fde68a':'var(--border)'};border-radius:12px;padding:16px;transition:border-color .3s;cursor:pointer;-webkit-tap-highlight-color:transparent">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <span style="font-size:14px;font-weight:700;flex:1">${r.name}</span>
-          <span class="badge ${catType==='towel'?'bg-blue':'bg-green'}" style="font-size:10px">${cat?.name||''}</span>
-          <span class="badge" style="background:${isDone?'#dcfce7':sent>0?'#fef3c7':'#f3f4f6'};color:${statusColor};font-size:10px">
-            ${isDone?'✓ Done':sent>0?'In Progress':'Not Started'}
-          </span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
-          <div style="text-align:center;background:#f3f4f6;border-radius:8px;padding:10px 4px">
-            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#374151">${r.qty.toLocaleString()}</div>
-            <div style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase;margin-top:2px">Total</div>
-          </div>
-          <div style="text-align:center;background:${isDone?'#dcfce7':sent>0?'#fef3c7':'#f9fafb'};border-radius:8px;padding:10px 4px">
-            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:${isDone?'#15803d':sent>0?'#92400e':'#d1d5db'}">${sent.toLocaleString()}</div>
-            <div style="font-size:9px;color:${statusColor};font-weight:700;text-transform:uppercase;margin-top:2px">Sent</div>
-          </div>
-          <div style="text-align:center;background:${remaining===0?'#dcfce7':'#fee2e2'};border-radius:8px;padding:10px 4px">
-            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:${remaining===0?'#15803d':'#dc2626'}">${remaining.toLocaleString()}</div>
-            <div style="font-size:9px;color:${remaining===0?'#15803d':'#dc2626'};font-weight:700;text-transform:uppercase;margin-top:2px">Left</div>
-          </div>
-        </div>
-        <div style="background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden">
-          <div style="height:100%;background:${isDone?'#16a34a':sent>0?'#eab308':'#e5e7eb'};width:${pct}%;transition:width .4s"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--muted)">
-          <span>📤 F2 stock: <strong style="color:#0284c7">${f2stock.toLocaleString()}</strong></span>
-          <span>${pct}% complete</span>
-        </div>
-      </div>`;
-    }).join('');
-  } else {
-    reqGrid.innerHTML = '<div style="font-size:13px;color:var(--muted)">No orders found for ' + fmtD(date) + '. Check Order / Pack page.</div>';
+  }).slice().sort((a,b) => _prodSortKey(a.name) - _prodSortKey(b.name));
+
+  const tbody = document.getElementById('op-product-tbody');
+  if(!tbody) { renderOpLog(date); return; }
+
+  if(!prods.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">No products found</td></tr>';
+    renderOpLog(date);
+    return;
   }
 
-  // ── Entry grid: grouped by sub-category ──
-  const entryGrid = document.getElementById('op-entry-grid');
+  tbody.innerHTML = prods.map(p => {
+    const pid = p.id;
+    const recvd      = _opReceivedToday(pid, date);
+    const sentToday  = _opSentTotal(pid, date);
+    const pendingQty = opQtys[pid] || 0;
+    const sentAll    = _opSentAllTime(pid);
+    const packedQty  = _opPackedQty(pid);
+    const remaining  = sentAll - packedQty;
+    const req        = required[pid] || 0;
 
-  function _opGroup(p) {
-    const cat = S.categories.find(c => c.id === p.catId);
-    const catName = (cat?.name || '').toLowerCase();
-    const pname = (p.name || '').toLowerCase();
-    if (catName.includes('cog') || pname.includes('(cog)')) return 'COG';
-    if (catName.includes('napkin') || pname.includes('napkin')) return 'NAPKIN';
-    if (catName.includes('table cloth') || catName.includes('tablecloth') || pname.includes('table cloth')) return 'TABLE CLOTH';
-    if (catName.includes('towel') || pname.includes('towel')) return 'TOWEL';
-    return 'LINEN';
-  }
+    const remColor  = remaining > 0 ? '#15803d' : remaining < 0 ? '#dc2626' : '#6b7280';
+    const remBg     = remaining > 0 ? '#dcfce7' : remaining < 0 ? '#fee2e2' : '#f3f4f6';
+    const entryBg   = pendingQty > 0 ? '#dcfce7' : sentToday > 0 ? '#f0fdf4' : '#f9fafb';
+    const entryBord = pendingQty > 0 ? '#16a34a' : sentToday > 0 ? '#86efac' : '#e5e7eb';
 
-  const groupOrder = ['COG','TOWEL','NAPKIN','TABLE CLOTH','LINEN'];
-  const groupColors = {
-    'COG':         {border:'#fbbf24', badge:'#92400e', badgeBg:'#fef3c7'},
-    'TOWEL':       {border:'#93c5fd', badge:'#1d4ed8', badgeBg:'#dbeafe'},
-    'NAPKIN':      {border:'#86efac', badge:'#15803d', badgeBg:'#dcfce7'},
-    'TABLE CLOTH': {border:'#d8b4fe', badge:'#7e22ce', badgeBg:'#f3e8ff'},
-    'LINEN':       {border:'#6ee7b7', badge:'#065f46', badgeBg:'#d1fae5'},
-  };
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:10px 14px;border-right:2px solid var(--border)">
+        <div style="font-weight:700;font-size:13px">${p.name}</div>
+        ${req > 0 ? `<div style="font-size:10px;color:#92400e;font-weight:600;margin-top:3px;background:#fef3c7;display:inline-block;padding:1px 7px;border-radius:4px">Need ${req.toLocaleString()} tmrw</div>` : ''}
+      </td>
+      <td style="text-align:center;background:#fef9c3;padding:10px 8px;border-right:1px solid #fde68a">
+        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:800;color:${recvd>0?'#92400e':'#d1d5db'}">${recvd>0?recvd.toLocaleString():'—'}</div>
+      </td>
+      <td id="op-entry-${pid}"
+          onclick="openKP('${p.name.replace(/'/g,"\\'")}','Qty sending to F2?',(v)=>{opQtys['${pid}']=v;renderOperation();},${pendingQty},false,true)"
+          style="text-align:center;background:${entryBg};padding:10px 8px;border-right:2px solid #fde68a;cursor:pointer;-webkit-tap-highlight-color:transparent;border-left:3px solid ${entryBord}">
+        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:800;color:${sentToday>0?'#15803d':'#9ca3af'}">${sentToday>0?sentToday.toLocaleString():'—'}</div>
+        ${pendingQty>0?`<div style="font-size:11px;font-weight:700;color:#15803d;margin-top:2px">+${pendingQty} pending</div>`:`<div style="font-size:9px;color:#9ca3af;text-transform:uppercase;font-weight:600;margin-top:2px">tap to add</div>`}
+      </td>
+      <td style="text-align:center;background:#eff6ff;padding:10px 8px;border-right:1px solid #bfdbfe">
+        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:800;color:${sentAll>0?'#1d4ed8':'#d1d5db'}">${sentAll>0?sentAll.toLocaleString():'—'}</div>
+      </td>
+      <td style="text-align:center;background:#eff6ff;padding:10px 8px;border-right:1px solid #bfdbfe">
+        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:800;color:${packedQty>0?'#7e22ce':'#d1d5db'}">${packedQty>0?packedQty.toLocaleString():'—'}</div>
+      </td>
+      <td style="text-align:center;padding:8px">
+        <div style="background:${remBg};border-radius:8px;padding:8px 6px;font-family:'DM Mono',monospace;font-size:20px;font-weight:800;color:${remColor}">${remaining.toLocaleString()}</div>
+      </td>
+    </tr>`;
+  }).join('');
 
-  const grouped = {}; groupOrder.forEach(g => grouped[g] = []);
-  S.products.forEach(p => {
-    if(reqKeys.includes(p.id)) return; // already shown in required section
-    if(opFilter !== 'all') {
-      const cat = S.categories.find(c => c.id === p.catId);
-      const ct = cat?.type || 'linen';
-      if(opFilter === 'towel' && ct !== 'towel') return;
-      if(opFilter === 'linen' && ct === 'towel') return;
-    }
-    grouped[_opGroup(p)].push(p);
-  });
-  groupOrder.forEach(g => grouped[g].sort((a,b)=>_prodSortKey(a.name)-_prodSortKey(b.name)));
-
-  let entryHtml = '';
-  groupOrder.forEach(groupName => {
-    const prods = grouped[groupName];
-    if (!prods.length) return;
-    const gc = groupColors[groupName];
-    entryHtml += `<div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid ${gc.border}">
-        <span style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;letter-spacing:.5px">${groupName}</span>
-        <span style="font-size:11px;font-weight:700;background:${gc.badgeBg};color:${gc.badge};padding:2px 10px;border-radius:20px;border:1px solid ${gc.border}">${prods.length} products</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">`;
-    prods.forEach(p => {
-      const pid = p.id, pname = p.name;
-      const qty = opQtys[pid] || 0;
-      const tracked = p.trackStock !== false;
-      entryHtml += `<div style="background:#fff;border:2px solid ${qty>0?gc.border:'var(--border)'};border-radius:14px;padding:14px;transition:border-color .2s${!tracked?';opacity:0.85':''}">
-        <div style="font-size:12px;font-weight:700;margin-bottom:8px;line-height:1.3;min-height:32px">${pname}${!tracked?' <span style="font-size:9px;color:#9ca3af">Op Only</span>':''}</div>
-        <div id="opq-${pid}"
-          onclick="openKP('${pname}','How many sending to Factory 2?',(v)=>{opQtys['${pid}']=v;_updateOpCard('${pid}',v);},${qty},false,true)"
-          style="font-family:'DM Mono',monospace;font-size:40px;font-weight:500;text-align:center;line-height:1.2;
-                 color:${qty>0?'#16a34a':'#9ca3af'};cursor:pointer;padding:12px 0;
-                 background:${qty>0?'#f0fdf4':'#f9fafb'};border-radius:10px;
-                 border:2px dashed ${qty>0?gc.border:'#e5e7eb'};
-                 transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent">
-          ${qty.toLocaleString()}
-        </div>
-        <div style="text-align:center;font-size:9px;color:var(--muted);margin-top:5px;font-weight:600">TAP TO ENTER</div>
-      </div>`;
-    });
-    entryHtml += `</div></div>`;
-  });
-  entryGrid.innerHTML = entryHtml;
-
-  // ── F2 Stock ──
-  renderF2Stock(date);
-
-  // ── Transfer log ──
   renderOpLog(date);
-}
-
-function adjOpQty(pid, d) {
-  opQtys[pid] = Math.max(0, (opQtys[pid]||0) + d);
-  const el = document.getElementById('opq-'+pid);
-  if(el) el.textContent = opQtys[pid];
 }
 
 function resetOpQtys() {
   opQtys = {};
-  S.products.forEach(p => {
-    const el = document.getElementById('opq-'+p.id);
-    if(el) el.textContent = 0;
-  });
+  renderOperation();
 }
 
 async function saveOpTransfer() {
@@ -5539,15 +5450,13 @@ async function saveOpTransfer() {
       const p = S.products.find(x=>x.id===pid);
       return (p?.name||pid)+' ×'+qty;
     }).join(', '));
-    resetOpQtys();
-    renderOperation();
+    resetOpQtys(); // also calls renderOperation
     _toast('✓ Transfer saved — Factory 2 stock updated', 2500);
   } catch(e) {
     // Table might not exist yet — save locally
     S.opTransfers.push(...newEntries);
     addActivity('Factory 1 transfer saved (local)');
-    resetOpQtys();
-    renderOperation();
+    resetOpQtys(); // also calls renderOperation
     _toast('Saved locally (run SQL to create op_transfers table)', 3000);
     console.warn('op_transfers table:', e.message);
   }
@@ -5568,53 +5477,32 @@ function _opSentTracked(productId, date) {
   return _opSentTotal(productId, date);
 }
 
-function _opUsedTotal(productId, date) {
-  // F2 stock = Sent from F1 MINUS delivered orders
-  // Packed orders are still physically in F2 — don't deduct them
-  // Delivered orders have left F2 — deduct those
-  return S.orders
-    .filter(o => o.deliveryDate === date && o.status === 'delivered')
-    .reduce((sum, o) => {
-      const it = o.items.find(x => x.productId === productId);
+function _opReceivedToday(productId, date) {
+  // Sum of items received in F1 on selected date (from receivingLog)
+  return (S.receivingLog || [])
+    .filter(l => l.receivedOn === date)
+    .reduce((sum, l) => {
+      const it = (l.items || []).find(x => x.productId === productId);
       return sum + (it ? it.qty : 0);
     }, 0);
 }
 
-function renderF2Stock(date) {
-  const el = document.getElementById('op-f2-stock');
-  if(!el) return;
-  
-  // Get all products that have any transfers OR orders for this date
-  // Only show tracked products in F2 stock
-  const productIds = new Set();
-  (S.opTransfers||[]).filter(t => t.date === date).forEach(t => {
-    const p = S.products.find(x => x.id === t.productId);
-    if(p && p.trackStock !== false) productIds.add(t.productId);
-  });
-  S.orders.filter(o => o.deliveryDate === date).forEach(o => o.items.forEach(it => productIds.add(it.productId)));
-  
-  if(!productIds.size) { el.innerHTML = '<div style="color:var(--muted);font-size:13px">No data for this date</div>'; return; }
-  
-  const rows = [...productIds].map(pid => {
-    const p = S.products.find(x => x.id === pid);
-    const sent = _opSentTotal(pid, date);
-    const used = _opUsedTotal(pid, date);
-    const available = sent - used;
-    const required = S.orders.filter(o => o.deliveryDate === date)
-      .reduce((s,o) => s + (o.items.find(it=>it.productId===pid)?.qty||0), 0);
-    return {name: p?.name||pid, sent, used, available, required};
-  }).sort((a,b) => a.name.localeCompare(b.name));
-  
-  el.innerHTML = rows.map(r => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-      <span style="flex:1;font-size:13px;font-weight:600">${r.name}</span>
-      <span style="font-size:12px;color:var(--accent2)" title="Sent from Factory 1">📤 ${r.sent}</span>
-      <span style="font-size:12px;color:var(--warn)" title="Used in packed/delivered orders">📋 ${r.used}</span>
-      <span class="badge ${r.available >= r.required ? 'bg-green' : r.available > 0 ? 'bg-warn' : 'bg-red'}" 
-        style="min-width:50px;text-align:center" title="Available in F2 / Required">
-        ${r.available} / ${r.required}
-      </span>
-    </div>`).join('');
+function _opSentAllTime(productId) {
+  // Cumulative total ever sent from F1 to F2 for this product (all dates)
+  if(!S.opTransfers) return 0;
+  return S.opTransfers
+    .filter(t => t.productId === productId)
+    .reduce((a,b) => a+b.qty, 0);
+}
+
+function _opPackedQty(productId) {
+  // All packed orders (not yet delivered), any delivery date — these have left F2 shelf
+  return S.orders
+    .filter(o => o.status === 'packed')
+    .reduce((sum, o) => {
+      const it = o.items.find(x => x.productId === productId);
+      return sum + (it ? it.qty : 0);
+    }, 0);
 }
 
 function renderOpLog(date) {
@@ -5781,21 +5669,6 @@ async function deleteRecvLog() {
 }
 
 
-function _updateOpCard(pid, qty) {
-  const el = document.getElementById('opq-'+pid);
-  if(!el) return;
-  el.textContent = qty.toLocaleString();
-  el.style.color = qty > 0 ? '#16a34a' : '#9ca3af';
-  el.style.background = qty > 0 ? '#f0fdf4' : '#f9fafb';
-  el.style.border = '2px dashed ' + (qty > 0 ? '#86efac' : '#e5e7eb');
-  // Also update parent card border
-  const card = el.closest('div[style*="border-radius:14px"]');
-  if(card) {
-    const p = card.querySelector('[class*="badge"]');
-    // update border color
-    card.style.borderColor = qty > 0 ? '#86efac' : '#e2e4ec';
-  }
-}
 
 
 // ═══════════════════════════════════════
