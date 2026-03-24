@@ -4317,7 +4317,10 @@ async function undoDelivery(id) {
 const _origSaveEO = saveEO;
 saveEO = async function() {
   const o = S.orders.find(x => x.id===eoId); if (!o) return;
-  
+  // Apply _eoUnsavedItems snapshot immediately — guards against loadFromDB having overwritten
+  // o.items with stale DB values between the user's last edit and the Save button press.
+  if(window._eoUnsavedItems) o.items = window._eoUnsavedItems.map(x=>({...x}));
+
   const totalQty = o.items.reduce((s,it) => s + (it.qty||0), 0);
   if(totalQty === 0) {
     if(confirm('All items are zero. Delete this order completely?')) {
@@ -5753,6 +5756,12 @@ async function deleteOpTransfer(id) {
 const _origLoadFromDB = loadFromDB;
 loadFromDB = async function() {
   await _origLoadFromDB();
+  // Restore unsaved EO edits — _origLoadFromDB rebuilds S.orders from DB, wiping in-flight user changes.
+  // _freshOrders has this guard but loadFromDB (called by the 15s timer) did not.
+  if(eoId && document.getElementById('eo-modal')?.classList.contains('open')){
+    const _eoOrder = S.orders.find(x=>x.id===eoId);
+    if(_eoOrder && window._eoUnsavedItems) _eoOrder.items = window._eoUnsavedItems.map(x=>({...x}));
+  }
   // Always load op_transfers
   try {
     const transfers = await _getAll('op_transfers','?select=*&order=date.desc,time_sent.desc');
