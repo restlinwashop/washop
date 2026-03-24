@@ -1290,8 +1290,62 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0;}
       <div id="cc-prod-list"></div>
     </div>
     <div class="cc-section" id="cc-history">
-      <div class="chart-wrap" style="margin-bottom:16px"><canvas id="cc-hist-chart"></canvas></div>
-      <table><thead><tr><th>Date</th><th>Product</th><th>Qty</th><th>Type</th></tr></thead><tbody id="cc-hist-tbody"></tbody></table>
+      <!-- Filters -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+          <div class="field" style="min-width:130px;margin-bottom:0"><label>From</label><input type="date" id="cch-from" onchange="renderCChistory()"></div>
+          <div class="field" style="min-width:130px;margin-bottom:0"><label>To</label><input type="date" id="cch-to" onchange="renderCChistory()"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:1px">
+            <button class="btn btn-xs btn-secondary" onclick="cchPreset('week')">This Week</button>
+            <button class="btn btn-xs btn-secondary" onclick="cchPreset('lastweek')">Last Week</button>
+            <button class="btn btn-xs btn-secondary" onclick="cchPreset('month')">Last Month</button>
+            <button class="btn btn-xs btn-secondary" onclick="cchPreset('3months')">Last 3 Months</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Products</div>
+          <div id="cch-prod-pills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
+      </div>
+      <!-- Actions + table -->
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <button class="btn btn-sm btn-secondary" onclick="exportCChistoryPDF()">⬇ Export PDF</button>
+      </div>
+      <div id="cch-table"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ DRIVER EDIT MODAL ════ -->
+<div class="modal-overlay" id="ed-modal">
+  <div class="modal" style="max-width:460px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div class="modal-title">Edit Driver</div>
+      <button class="btn btn-sm btn-secondary" onclick="closeEditDriver()">✕</button>
+    </div>
+    <input type="hidden" id="ed-id">
+    <div class="grid-2">
+      <div class="field"><label>Name</label><input id="ed-name" placeholder="e.g. James"></div>
+      <div class="field"><label>Vehicle</label><input id="ed-vehicle" placeholder="e.g. LDV Van 1ABC234"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label>PIN (4 digits)</label><input id="ed-pin" type="number" maxlength="4" placeholder="4-digit PIN"></div>
+      <div class="field"><label>Phone</label><input id="ed-phone" type="tel" placeholder="e.g. 0412 000 000"></div>
+    </div>
+    <div class="field">
+      <label>Working Days</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;padding:6px 0">
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" value="1" class="ed-day-cb" style="width:auto"> Mon</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" value="2" class="ed-day-cb" style="width:auto"> Tue</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" value="3" class="ed-day-cb" style="width:auto"> Wed</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" value="4" class="ed-day-cb" style="width:auto"> Thu</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" value="5" class="ed-day-cb" style="width:auto"> Fri</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" value="6" class="ed-day-cb" style="width:auto"> Sat</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+      <button class="btn btn-secondary" onclick="closeEditDriver()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditDriver()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -2876,7 +2930,8 @@ function renderHistChart(entries){
 // ═══════════════════════════════════════════════
 // CUSTOMER CARD MODAL
 // ═══════════════════════════════════════════════
-let ccId=null,ccHistChart=null;
+let ccId=null;
+let _cchSelProds=null,_cchLastCustId=null; // null = all products
 function openCC(id){
   ccId=id;const c=S.customers.find(x=>x.id===id);if(!c)return;
   // Products are loaded fresh when the Products tab is opened (see showCCtab)
@@ -3197,15 +3252,172 @@ async function unselectCatProds(catId) {
 }
 function toggleCustProd(cid,pid,checked){const s=getCustProds(cid);if(checked)s.add(pid);else s.delete(pid);}
 function renderCChistory(){
-  const entries=S.history.filter(h=>h.customerId===ccId);
-  const tb=document.getElementById('cc-hist-tbody');
-  if(!entries.length){tb.innerHTML='<tr><td colspan="4" class="empty">No history</td></tr>';return;}
-  tb.innerHTML=entries.slice().reverse().map(h=>{const p=S.products.find(x=>x.id===h.productId);return`<tr><td style="font-family:'DM Mono',monospace;font-size:12px">${h.date}</td><td>${p?.name||'?'}</td><td><span class="badge bg-blue">${h.qty}</span></td><td><span class="badge ${h.type==='receive'?'bg-green':'bg-warn'}">${h.type.toUpperCase()}</span></td></tr>`;}).join('');
-  const ctx=document.getElementById('cc-hist-chart').getContext('2d');
-  if(ccHistChart){ccHistChart.destroy();ccHistChart=null;}
-  const bd={};entries.forEach(h=>{if(!bd[h.date])bd[h.date]={receive:0,dispatch:0};bd[h.date][h.type]+=h.qty;});
-  const labels=Object.keys(bd).sort();
-  ccHistChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Received',data:labels.map(d=>bd[d].receive),backgroundColor:'rgba(2,132,199,.3)',borderColor:'#0284c7',borderWidth:1.5,borderRadius:4},{label:'Dispatched',data:labels.map(d=>bd[d].dispatch),backgroundColor:'rgba(22,163,74,.3)',borderColor:'#16a34a',borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#374151',font:{size:10}}}},scales:{x:{grid:{color:'#e2e4ec'},ticks:{color:'#6b7280',font:{size:10}}},y:{grid:{color:'#e2e4ec'},ticks:{color:'#6b7280',font:{size:10}}}}}});
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  const fromEl=document.getElementById('cch-from');
+  const toEl=document.getElementById('cch-to');
+  if(!fromEl||!toEl) return;
+
+  // Reset state when customer changes
+  if(_cchLastCustId!==ccId){
+    _cchLastCustId=ccId; _cchSelProds=null;
+    const to=new Date(), from=new Date(to); from.setMonth(from.getMonth()-3);
+    fromEl.value=from.toISOString().slice(0,10);
+    toEl.value=to.toISOString().slice(0,10);
+  }
+
+  // Render product filter pills
+  const assigned=getCustProds(ccId);
+  const custProdList=S.products.filter(p=>assigned.size?assigned.has(p.id):true);
+  const pillsEl=document.getElementById('cch-prod-pills');
+  const allActive=_cchSelProds===null||_cchSelProds.size===0;
+  pillsEl.innerHTML=
+    `<span onclick="cchToggleProd(null)" style="padding:4px 11px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid ${allActive?'var(--accent)':'var(--border)'};font-weight:700;user-select:none;background:${allActive?'var(--accent)':'#fff'};color:${allActive?'#fff':'var(--muted)'};transition:all .15s">All</span>`+
+    custProdList.map(p=>{
+      const active=!allActive&&_cchSelProds.has(p.id);
+      return`<span onclick="cchToggleProd('${p.id}')" style="padding:4px 11px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid ${active?'var(--accent2)':'var(--border)'};font-weight:600;user-select:none;background:${active?'var(--accent2)':'#fff'};color:${active?'#fff':'var(--muted)'};transition:all .15s">${p.name}</span>`;
+    }).join('');
+
+  // Filter history
+  const from=fromEl.value, to=toEl.value;
+  const entries=S.history.filter(h=>{
+    if(h.customerId!==ccId) return false;
+    if(h.date<from||h.date>to) return false;
+    if(_cchSelProds&&_cchSelProds.size&&!_cchSelProds.has(h.productId)) return false;
+    return true;
+  });
+
+  // Aggregate by date+product
+  const agg={};
+  entries.forEach(h=>{
+    const key=h.date+'|'+h.productId;
+    if(!agg[key]) agg[key]={date:h.date,productId:h.productId,dispatched:0,received:0};
+    if(h.type==='dispatch') agg[key].dispatched+=h.qty;
+    else if(h.type==='receive') agg[key].received+=h.qty;
+  });
+  const rows=Object.values(agg).sort((a,b)=>b.date.localeCompare(a.date)||((S.products.find(x=>x.id===a.productId)?.name||'').localeCompare(S.products.find(x=>x.id===b.productId)?.name||'')));
+
+  const tableEl=document.getElementById('cch-table');
+  if(!rows.length){tableEl.innerHTML='<div class="empty">No history for this period.</div>';return;}
+  tableEl.innerHTML=`<table>
+    <thead><tr><th>Date</th><th>Product</th><th style="text-align:right">Dispatched</th><th style="text-align:right">Received</th><th style="text-align:right">Difference</th></tr></thead>
+    <tbody>${rows.map(r=>{
+      const p=S.products.find(x=>x.id===r.productId);
+      const diff=r.dispatched-r.received;
+      return`<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;white-space:nowrap">${r.date}</td>
+        <td>${p?.name||'?'}</td>
+        <td style="text-align:right"><span class="badge bg-warn">${r.dispatched||'—'}</span></td>
+        <td style="text-align:right"><span class="badge bg-blue">${r.received||'—'}</span></td>
+        <td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:${diff>0?'var(--warn)':diff<0?'var(--accent2)':'var(--muted)'}">${diff>0?'+':''}${diff}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function cchToggleProd(pid){
+  const assigned=getCustProds(ccId);
+  const custProdList=S.products.filter(p=>assigned.size?assigned.has(p.id):true);
+  if(pid===null){_cchSelProds=null;}
+  else if(_cchSelProds===null){_cchSelProds=new Set([pid]);}
+  else if(_cchSelProds.has(pid)){
+    _cchSelProds.delete(pid);
+    if(_cchSelProds.size===0) _cchSelProds=null;
+  } else {
+    _cchSelProds.add(pid);
+    if(_cchSelProds.size===custProdList.length) _cchSelProds=null;
+  }
+  renderCChistory();
+}
+
+function cchPreset(preset){
+  const fromEl=document.getElementById('cch-from');
+  const toEl=document.getElementById('cch-to');
+  const today=new Date();
+  const iso=d=>d.toISOString().slice(0,10);
+  if(preset==='week'){
+    const dow=today.getDay(); const mon=new Date(today); mon.setDate(today.getDate()-(dow===0?6:dow-1));
+    fromEl.value=iso(mon); toEl.value=iso(today);
+  } else if(preset==='lastweek'){
+    const dow=today.getDay(); const mon=new Date(today); mon.setDate(today.getDate()-(dow===0?6:dow-1)-7);
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    fromEl.value=iso(mon); toEl.value=iso(sun);
+  } else if(preset==='month'){
+    fromEl.value=iso(new Date(today.getFullYear(),today.getMonth()-1,1));
+    toEl.value=iso(new Date(today.getFullYear(),today.getMonth(),0));
+  } else if(preset==='3months'){
+    const from=new Date(today); from.setMonth(from.getMonth()-3);
+    fromEl.value=iso(from); toEl.value=iso(today);
+  }
+  renderCChistory();
+}
+
+function exportCChistoryPDF(){
+  const c=S.customers.find(x=>x.id===ccId); if(!c) return;
+  const from=document.getElementById('cch-from').value;
+  const to=document.getElementById('cch-to').value;
+  const entries=S.history.filter(h=>{
+    if(h.customerId!==ccId) return false;
+    if(h.date<from||h.date>to) return false;
+    if(_cchSelProds&&_cchSelProds.size&&!_cchSelProds.has(h.productId)) return false;
+    return true;
+  });
+  if(!entries.length){_toast('No data to export',2000);return;}
+  const agg={};
+  entries.forEach(h=>{
+    const key=h.date+'|'+h.productId;
+    if(!agg[key]) agg[key]={date:h.date,productId:h.productId,dispatched:0,received:0};
+    if(h.type==='dispatch') agg[key].dispatched+=h.qty;
+    else if(h.type==='receive') agg[key].received+=h.qty;
+  });
+  const rows=Object.values(agg).sort((a,b)=>a.date.localeCompare(b.date)||((S.products.find(x=>x.id===a.productId)?.name||'').localeCompare(S.products.find(x=>x.id===b.productId)?.name||'')));
+  const byProduct={};
+  rows.forEach(r=>{
+    if(!byProduct[r.productId]) byProduct[r.productId]={name:S.products.find(x=>x.id===r.productId)?.name||'?',rows:[],totalDisp:0,totalRecv:0};
+    byProduct[r.productId].rows.push(r);
+    byProduct[r.productId].totalDisp+=r.dispatched;
+    byProduct[r.productId].totalRecv+=r.received;
+  });
+  const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'});
+  const today=new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'long',year:'numeric'});
+  let body=`<html><head><title>Linen Report — ${c.name}</title><style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:Arial,sans-serif;font-size:13px;color:#1f2937;padding:40px;}
+    .hdr{padding-bottom:20px;border-bottom:3px solid #16a34a;margin-bottom:28px;}
+    .company{font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:2px;}
+    .cust{font-size:22px;font-weight:800;margin:6px 0 4px;}
+    .period{font-size:13px;font-weight:600;color:#374151;}
+    .meta{font-size:11px;color:#9ca3af;margin-top:3px;}
+    h2{font-size:13px;font-weight:700;background:#1e2235;color:#fff;padding:8px 12px;margin:24px 0 0;letter-spacing:.5px;}
+    table{width:100%;border-collapse:collapse;}
+    th{text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;background:#f3f4f6;color:#6b7280;border-bottom:2px solid #e5e7eb;}
+    td{padding:8px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;}
+    .r{text-align:right;font-family:monospace;}
+    .bold{font-weight:700;}
+    .total td{background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb;}
+    .pos{color:#d97706;}.neg{color:#0284c7;}.zero{color:#9ca3af;}
+    .footer{margin-top:40px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center;}
+    .print-btn{display:block;margin:24px auto 0;padding:11px 28px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;}
+    @media print{.print-btn{display:none;}}
+  </style></head><body>
+  <div class="hdr">
+    <div class="company">WashOps — Linen &amp; Laundry Report</div>
+    <div class="cust">${c.name}</div>
+    <div class="period">Period: ${fmtD(from)} — ${fmtD(to)}</div>
+    <div class="meta">Generated: ${today}</div>
+  </div>`;
+  Object.values(byProduct).forEach(prod=>{
+    const diff=prod.totalDisp-prod.totalRecv;
+    const cls=diff>0?'pos':diff<0?'neg':'zero';
+    body+=`<h2>${prod.name}</h2>
+    <table><thead><tr><th>Date</th><th class="r">Dispatched</th><th class="r">Received</th><th class="r">Difference</th></tr></thead>
+    <tbody>${prod.rows.map(r=>{const d=r.dispatched-r.received;const dc=d>0?'pos':d<0?'neg':'zero';return`<tr><td>${fmtD(r.date)}</td><td class="r">${r.dispatched||'—'}</td><td class="r">${r.received||'—'}</td><td class="r bold ${dc}">${d>0?'+':''}${d}</td></tr>`;}).join('')}
+    <tr class="total"><td>Total</td><td class="r">${prod.totalDisp}</td><td class="r">${prod.totalRecv}</td><td class="r ${cls}">${diff>0?'+':''}${diff}</td></tr>
+    </tbody></table>`;
+  });
+  body+=`<div class="footer">WashOps Laundry Management · ${today}</div>
+  <button class="print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+  </body></html>`;
+  const w=window.open('','_blank'); w.document.write(body); w.document.close();
 }
 
 // ═══════════════════════════════════════════════
@@ -3389,10 +3601,10 @@ function renderAdmin(){
     <div class="ali" style="cursor:default">
       <span style="font-size:20px">🚗</span>
       <div class="ali-name">${d.name}</div>
-      <div class="ali-meta">${d.vehicle}</div>
-      <div class="ali-meta">${S.customers.filter(c=>c.driverId===d.id).length} customers · PIN: <strong>${d.pin||'not set'}</strong></div>
-      <input placeholder="Set PIN" maxlength="4" type="number" style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" 
-        onchange="setDriverPin('${d.id}',this.value)">
+      <div class="ali-meta">${d.vehicle||'No vehicle'}</div>
+      <div class="ali-meta">${S.customers.filter(c=>c.driverId===d.id).length} customers · PIN: <strong>${d.pin||'not set'}</strong>${d.phone?` · 📞 ${d.phone}`:''}</div>
+      ${d.workDays?.length?`<div class="ali-meta">Works: ${['','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_,i)=>d.workDays.includes(i)).join(', ')}</div>`:''}
+      <button class="btn btn-xs btn-blue" onclick="openEditDriver('${d.id}')">✏ Edit</button>
       <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removeDriver('${d.id}')">Remove</button>
     </div>`).join('')||'<div class="empty">No drivers</div>';
   // Categories
@@ -3960,7 +4172,7 @@ async function loadFromDB() {
       skipReturn:c.skip_return||false,
       active:c.active!==0, driverId:c.driver_id||null, routeOrder:c.route_order||99
     }));
-    S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||'', pin:d.pin||''}));
+    S.drivers     = drvs.map(d => ({id:d.id, name:d.name, vehicle:d.vehicle||'', pin:d.pin||'', phone:d.phone||'', workDays:d.work_days?(()=>{try{return JSON.parse(d.work_days);}catch(e){return[];}})():[]}));
     S.categories  = cats.map(c => ({id:c.id, name:c.name, type:c.type||'linen'}));
     S.products    = prods.map(p => ({id:p.id, name:p.name, catId:p.cat_id, trackStock:p.track_stock !== false}));
 
@@ -4211,6 +4423,40 @@ addCustomer = async function() {
   document.querySelectorAll('.nc-day-cb').forEach(cb => cb.checked = false);
   renderAdmin(); _toast('✓ Customer added', 2000);
 };
+
+function openEditDriver(id){
+  const d=S.drivers.find(x=>x.id===id); if(!d) return;
+  document.getElementById('ed-id').value=id;
+  document.getElementById('ed-name').value=d.name;
+  document.getElementById('ed-vehicle').value=d.vehicle||'';
+  document.getElementById('ed-pin').value=d.pin||'';
+  document.getElementById('ed-phone').value=d.phone||'';
+  const workDays=d.workDays&&d.workDays.length?d.workDays:[1,2,3,4,5,6];
+  document.querySelectorAll('.ed-day-cb').forEach(cb=>{cb.checked=workDays.includes(parseInt(cb.value));});
+  document.getElementById('ed-modal').classList.add('open');
+}
+function closeEditDriver(){document.getElementById('ed-modal').classList.remove('open');}
+async function saveEditDriver(){
+  const id=document.getElementById('ed-id').value;
+  const d=S.drivers.find(x=>x.id===id); if(!d) return;
+  const name=document.getElementById('ed-name').value.trim();
+  const vehicle=document.getElementById('ed-vehicle').value.trim();
+  const pin=document.getElementById('ed-pin').value.trim();
+  const phone=document.getElementById('ed-phone').value.trim();
+  const workDays=[...document.querySelectorAll('.ed-day-cb:checked')].map(cb=>parseInt(cb.value));
+  if(!name) return alert('Name is required.');
+  if(pin&&(pin.length!==4||isNaN(pin))) return _toast('PIN must be 4 digits',2500);
+  if(pin&&S.drivers.some(x=>x.id!==id&&x.pin===pin)) return _toast('PIN already used by another driver',2500);
+  const finalPin=pin||d.pin||'';
+  try {
+    await _patch('drivers',{name,vehicle,pin:finalPin,phone,work_days:JSON.stringify(workDays)},'?id=eq.'+id);
+  } catch(e){
+    // phone/work_days columns may not exist yet — fall back to core fields
+    try { await _patch('drivers',{name,vehicle,pin:finalPin},'?id=eq.'+id); } catch(e2){ return alert('DB error: '+e2.message); }
+  }
+  d.name=name; d.vehicle=vehicle; d.pin=finalPin; d.phone=phone; d.workDays=workDays;
+  closeEditDriver(); renderAdmin(); _toast('✓ Driver updated',2000);
+}
 
 const _origAddDriver = addDriver;
 addDriver = async function() {
